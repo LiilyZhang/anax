@@ -1025,23 +1025,32 @@ func invokeRestApi(httpClient *http.Client, method string, url string, credentia
 
 	TrustIcpCert(httpClient)
 
+	// get message printer
+	msgPrinter := i18n.GetMessagePrinter()
+
+	// get retry count and retry interval from env
+	maxRetries, retryInterval, err := GetHttpRetryParameters(5, 2)
+	if err != nil {
+		Fatal(CLI_GENERAL_ERROR, err.Error())
+	}
+
 	retryCount := 0
 	for {
 		retryCount++
-
-		// get message printer
-		msgPrinter := i18n.GetMessagePrinter()
 
 		// requestBody is nil if body is nil.
 		requestBody, bodyLen, bodyType := createRequestBody(body, apiMsg)
 
 		// If we're retrying with an os.File body, then re-open it.
-		if retryCount > 1 {
-			file := body.(*os.File)
-			if rb, err := os.Open(file.Name()); err != nil {
-				Fatal(CLI_INPUT_ERROR, msgPrinter.Sprintf("unable to open object file %v: %v", file.Name(), err))
-			} else {
-				requestBody = rb
+		if retryCount > 1 && body != nil {
+			switch body.(type) {
+			case *os.File:
+				file := body.(*os.File)
+				if rb, err := os.Open(file.Name()); err != nil {
+					Fatal(CLI_INPUT_ERROR, msgPrinter.Sprintf("unable to open object file %v: %v", file.Name(), err))
+				} else {
+					requestBody = rb
+				}
 			}
 		}
 
@@ -1081,10 +1090,10 @@ func invokeRestApi(httpClient *http.Client, method string, url string, credentia
 			if resp != nil {
 				http_status = resp.Status
 			}
-			if retryCount <= 5 {
+			if retryCount <= maxRetries {
 				Verbose(msgPrinter.Sprintf("Encountered HTTP error: %v calling %v REST API %v. HTTP status: %v. Will retry.", err, service, apiMsg, http_status))
 				// retry for network tranport errors
-				time.Sleep(2 * time.Second)
+				time.Sleep(time.Duration(retryInterval) * time.Second)
 				continue
 			} else {
 				Fatal(HTTP_ERROR, msgPrinter.Sprintf("Encountered HTTP error: %v calling %v REST API %v. HTTP status: %v.", err, service, apiMsg, http_status))
@@ -1483,6 +1492,33 @@ func GetHTTPClient(timeout int) *http.Client {
 		},
 	}
 
+}
+
+// get the http retry count and interval from the env variables.
+func GetHttpRetryParameters(default_count int, default_interval int) (int, int, error) {
+	maxRetries := default_count
+	retryInterval := default_interval
+
+	// get message printer
+	msgPrinter := i18n.GetMessagePrinter()
+
+	// get retry count and retry interval from env
+	maxRetries_s := os.Getenv("HZN_HTTP_RETRIES")
+	if maxRetries_s != "" {
+		var err1 error
+		if maxRetries, err1 = strconv.Atoi(maxRetries_s); err1 != nil {
+			return 0, 0, fmt.Errorf(msgPrinter.Sprintf("Error converting environmental variable HZN_HTTP_RETRIES %v to integer. %v", maxRetries_s, err1))
+		}
+	}
+	retryInterval_s := os.Getenv("HZN_HTTP_RETRY_INTERVAL")
+	if retryInterval_s != "" {
+		var err1 error
+		if retryInterval, err1 = strconv.Atoi(retryInterval_s); err1 != nil {
+			return 0, 0, fmt.Errorf(msgPrinter.Sprintf("Error converting environmental variable HZN_HTTP_RETRY_INTERVAL %v to integer. %v", retryInterval_s, err1))
+		}
+	}
+
+	return maxRetries, retryInterval, nil
 }
 
 /* Will probably need this....
