@@ -6,9 +6,10 @@ import (
 	dockerclient "github.com/fsouza/go-dockerclient"
 	"github.com/open-horizon/anax/cli/cliutils"
 	"github.com/open-horizon/anax/cli/dev"
-	cliexchange "github.com/open-horizon/anax/cli/exchange"
 	"github.com/open-horizon/anax/cli/plugin_registry"
 	"github.com/open-horizon/anax/cli/sync_service"
+	"github.com/open-horizon/anax/common"
+	"github.com/open-horizon/anax/config"
 	"github.com/open-horizon/anax/containermessage"
 	"github.com/open-horizon/anax/cutil"
 	"github.com/open-horizon/anax/i18n"
@@ -98,7 +99,11 @@ func (p *NativeDeploymentConfigPlugin) GetContainerImages(dep interface{}) (bool
 		return owned, imageList, err
 	}
 
-	depConfig := cliexchange.ConvertToDeploymentConfig(dep)
+	depConfig, err := common.ConvertToDeploymentConfig(dep)
+	if err != nil {
+		cliutils.Fatal(cliutils.CLI_GENERAL_ERROR, err.Error())
+	}
+
 	for _, svc := range depConfig.Services {
 		imageList = append(imageList, svc.Image)
 	}
@@ -141,7 +146,11 @@ func (p *NativeDeploymentConfigPlugin) Validate(dep interface{}) (bool, error) {
 	} else if services, ok := s.(map[string]interface{}); !ok {
 		return false, nil
 	} else {
-		depConfig := cliexchange.ConvertToDeploymentConfig(dep)
+		depConfig, err1 := common.ConvertToDeploymentConfig(dep)
+		if err1 != nil {
+			cliutils.Fatal(cliutils.CLI_GENERAL_ERROR, err1.Error())
+		}
+
 		if err := depConfig.CanStartStop(); err != nil {
 			return true, err
 		}
@@ -165,6 +174,7 @@ var VALID_DEPLOYMENT_FIELDS = map[string]int8{"image": 1, "privileged": 1, "cap_
 
 // CheckDeploymentService verifies it has the required 'image' key, and checks for keys we don't recognize.
 // For now it only prints a warning for unrecognized keys, in case we recently added a key to anax and haven't updated hzn yet.
+// It also checks for invalid use of the default anax port, and puts out a warning message.
 func CheckDeploymentService(svcName string, depSvc map[string]interface{}) error {
 	// get message printer
 	msgPrinter := i18n.GetMessagePrinter()
@@ -177,6 +187,25 @@ func CheckDeploymentService(svcName string, depSvc map[string]interface{}) error
 	for k := range depSvc {
 		if _, ok := VALID_DEPLOYMENT_FIELDS[k]; !ok {
 			cliutils.Warning(msgPrinter.Sprintf("service '%s' defined under 'deployment.services' has unrecognized field '%s'. See https://github.com/open-horizon/anax/blob/master/doc/deployment_string.md", svcName, k))
+		}
+
+		// Check for the use of the default agent API port, which will cause a port conflict at runtime.
+		if k == "ports" {
+			// Marshal and unmarshal the ports deployment config so that we can reuse typed APIs for parsing the host port
+			// references out of the ports config value.
+			var pbs []dockerclient.PortBinding
+			if bytes, err := json.Marshal(depSvc[k]); err != nil {
+				cliutils.Fatal(cliutils.JSON_PARSING_ERROR, msgPrinter.Sprintf("service '%s' defined under 'deployment.services' has a malformed ports value %v, error %v", svcName, depSvc[k], err))
+			} else if err := json.Unmarshal(bytes, &pbs); err != nil {
+				cliutils.Fatal(cliutils.JSON_PARSING_ERROR, msgPrinter.Sprintf("service '%s' defined under 'deployment.services' has a malformed ports value %v, error %v", svcName, string(bytes), err))
+			} else {
+				for _, pb := range pbs {
+					hostPort := containermessage.GetSpecificHostPort(pb.HostPort)
+					if hostPort != "" && hostPort == config.AnaxAPIPortDefault {
+						cliutils.Warning(msgPrinter.Sprintf("service '%s' defined under 'deployment.services' is mapping a port %v to the default Horizon API port %v. This service will fail when deployed on a node which has not changed the default Horizon API port.", svcName, pb, config.AnaxAPIPortDefault))
+					}
+				}
+			}
 		}
 	}
 	return nil

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/open-horizon/anax/cli/cliconfig"
 	"github.com/open-horizon/anax/cli/cliutils"
+	"github.com/open-horizon/anax/common"
+	"github.com/open-horizon/anax/cutil"
 	"github.com/open-horizon/anax/exchange"
 	"github.com/open-horizon/anax/i18n"
 	"github.com/open-horizon/anax/policy"
@@ -31,7 +33,7 @@ type PatternOutput struct {
 	Services           []ServiceReference           `json:"services"`
 	AgreementProtocols []exchange.AgreementProtocol `json:"agreementProtocols"`
 	UserInput          []policy.UserInput           `json:"userInput,omitempty"`
-	LastUpdated        string                       `json:"lastUpdated"`
+	LastUpdated        string                       `json:"lastUpdated,omitempty"`
 }
 
 // These 5 structs are used when reading json file the user gives us as input to create the pattern struct
@@ -40,32 +42,6 @@ type ServiceOverrides struct {
 }
 type DeploymentOverrides struct {
 	Services map[string]ServiceOverrides `json:"services"`
-}
-type ServiceChoiceFile struct {
-	Version                      string                     `json:"version"`            // the version of the service
-	Priority                     *exchange.WorkloadPriority `json:"priority,omitempty"` // the highest priority service is tried first for an agreement, if it fails, the next priority is tried. Priority 1 is the highest, priority 2 is next, etc.
-	Upgrade                      *exchange.UpgradePolicy    `json:"upgradePolicy,omitempty"`
-	DeploymentOverrides          interface{}                `json:"deployment_overrides,omitempty"`           // env var overrides for the service
-	DeploymentOverridesSignature string                     `json:"deployment_overrides_signature,omitempty"` // signature of env var overrides
-}
-type ServiceReferenceFile struct {
-	ServiceURL      string                     `json:"serviceUrl"`                 // refers to a service definition in the exchange
-	ServiceOrg      string                     `json:"serviceOrgid"`               // the org holding the service definition
-	ServiceArch     string                     `json:"serviceArch"`                // the hardware architecture of the service definition
-	AgreementLess   bool                       `json:"agreementLess,omitempty"`    // a special case where this service will also be required by others
-	ServiceVersions []ServiceChoiceFile        `json:"serviceVersions"`            // a list of service version for rollback
-	DataVerify      *exchange.DataVerification `json:"dataVerification,omitempty"` // policy for verifying that the node is sending data
-	NodeH           *exchange.NodeHealth       `json:"nodeHealth,omitempty"`       // this needs to be a ptr so it will be omitted if not specified, so exchange will default it
-}
-type PatternFile struct {
-	Name               string                       `json:"name,omitempty"`
-	Org                string                       `json:"org,omitempty"` // optional
-	Label              string                       `json:"label"`
-	Description        string                       `json:"description,omitempty"`
-	Public             bool                         `json:"public"`
-	Services           []ServiceReferenceFile       `json:"services"`
-	AgreementProtocols []exchange.AgreementProtocol `json:"agreementProtocols,omitempty"`
-	UserInput          []policy.UserInput           `json:"userInput,omitempty"`
 }
 
 type ServiceChoice struct {
@@ -206,7 +182,7 @@ func PatternPublish(org, userPw, jsonFilePath, keyFilePath, pubKeyFilePath, patN
 	cliutils.SetWhetherUsingApiKey(userPw)
 	// Read in the pattern metadata
 	newBytes := cliconfig.ReadJsonFileWithLocalConfig(jsonFilePath)
-	var patFile PatternFile
+	var patFile common.PatternFile
 	err := json.Unmarshal(newBytes, &patFile)
 	if err != nil {
 		cliutils.Fatal(cliutils.JSON_PARSING_ERROR, msgPrinter.Sprintf("failed to unmarshal json input file %s: %v", jsonFilePath, err))
@@ -224,10 +200,10 @@ func PatternPublish(org, userPw, jsonFilePath, keyFilePath, pubKeyFilePath, patN
 		cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("the pattern definition (%s) must contain services, unable to proceed", patFile.Services))
 	}
 
+	keyVerified := false
 	// Loop thru the services array and the servicesVersions array and sign the deployment_overrides fields
 	if patFile.Services != nil && len(patFile.Services) > 0 {
 		patInput.Services = make([]ServiceReference, len(patFile.Services))
-		keyVerified := false
 		for i := range patFile.Services {
 			patInput.Services[i].ServiceURL = patFile.Services[i].ServiceURL
 			patInput.Services[i].ServiceOrg = patFile.Services[i].ServiceOrg
@@ -268,6 +244,7 @@ func PatternPublish(org, userPw, jsonFilePath, keyFilePath, pubKeyFilePath, patN
 					// We know we need to sign the overrides, so make sure a real key file was provided.
 					if !keyVerified {
 						keyFilePath, pubKeyFilePath = cliutils.GetSigningKeys(keyFilePath, pubKeyFilePath)
+						keyVerified = true
 					}
 
 					patInput.Services[i].ServiceVersions[j].DeploymentOverridesSignature, err = sign.Input(keyFilePath, deployment)
@@ -291,7 +268,7 @@ func PatternPublish(org, userPw, jsonFilePath, keyFilePath, pubKeyFilePath, patN
 		exchId = strings.TrimSuffix(exchId, filepath.Ext(exchId)) // strip suffix if there
 	}
 	// replace the unwanted charactors from the id with '-'
-	exchId = cliutils.FormExchangeId(exchId)
+	exchId = cutil.FormExchangeId(exchId)
 
 	var output string
 	httpCode := cliutils.ExchangeGet("Exchange", exchUrl, "orgs/"+patFile.Org+"/patterns/"+exchId, cliutils.OrgAndCreds(org, userPw), []int{200, 404}, &output)
@@ -310,6 +287,9 @@ func PatternPublish(org, userPw, jsonFilePath, keyFilePath, pubKeyFilePath, patN
 	// Store the public key in the exchange, if they gave it to us
 	if pubKeyFilePath != "" {
 		// Note: already verified the file exists
+		if !keyVerified {
+			pubKeyFilePath = cliutils.GetAndVerifyPublicKey(pubKeyFilePath)
+		}
 		bodyBytes := cliutils.ReadFile(pubKeyFilePath)
 		baseName := filepath.Base(pubKeyFilePath)
 		msgPrinter.Printf("Storing %s with the pattern in the exchange...", baseName)
@@ -352,7 +332,7 @@ func PatternVerify(org, userPw, pattern, keyFilePath string) {
 			}
 			if !keyVerified {
 				//take default key if empty, make sure the key exists
-				keyFilePath = cliutils.VerifySigningKeyInput(keyFilePath, true)
+				keyFilePath = cliutils.GetAndVerifyPublicKey(keyFilePath)
 				keyVerified = true
 			}
 			verified, err := verify.Input(keyFilePath, pat.Services[i].ServiceVersions[j].DeploymentOverridesSignature, []byte(pat.Services[i].ServiceVersions[j].DeploymentOverrides))

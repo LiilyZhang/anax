@@ -13,6 +13,8 @@ import (
 	"github.com/open-horizon/anax/config"
 	"github.com/open-horizon/anax/exchange"
 	"github.com/open-horizon/anax/i18n"
+	"github.com/open-horizon/rsapss-tool/sign"
+	"github.com/open-horizon/rsapss-tool/verify"
 	"golang.org/x/text/language"
 	"io"
 	"io/ioutil"
@@ -343,29 +345,6 @@ func AddOrg(org, id string) string {
 		Fatal(CLI_INPUT_ERROR, i18n.GetMessagePrinter().Sprintf("the id can not contain more than 1 '/'"))
 	}
 	return "" // will never get here
-}
-
-// FormExchangeId combines url, version, arch the same way the exchange does to form the resource ID.
-func FormExchangeIdForService(url, version, arch string) string {
-	// Remove the https:// from the beginning of workloadUrl and replace troublesome chars with a dash.
-	//val workloadUrl2 = """^[A-Za-z0-9+.-]*?://""".r replaceFirstIn (url, "")
-	//val workloadUrl3 = """[$!*,;/?@&~=%]""".r replaceAllIn (workloadUrl2, "-")     // I think possible chars in valid urls are: $_.+!*,;/?:@&~=%-
-	//return OrgAndId(orgid, workloadUrl3 + "_" + version + "_" + arch).toString
-	url1 := FormExchangeIdWithSpecRef(url)
-	return url1 + "_" + version + "_" + arch
-}
-
-// Remove the https:// from the beginning of workloadUrl and replace troublesome chars with a dash.
-func FormExchangeIdWithSpecRef(specRef string) string {
-	re := regexp.MustCompile(`^[A-Za-z0-9+.-]*?://`)
-	specRef2 := re.ReplaceAllLiteralString(specRef, "")
-	return FormExchangeId(specRef2)
-}
-
-// Replace unwanted charactore with - in the id
-func FormExchangeId(id string) string {
-	re := regexp.MustCompile(`[$!*,;/?@&~=%]`)
-	return re.ReplaceAllLiteralString(id, "-")
 }
 
 // ReadStdin reads from stdin, and returns it as a byte array.
@@ -1286,6 +1265,30 @@ func SetDefaultArch() {
 	}
 }
 
+func GetAndVerifyPublicKey(pubKeyFilePath string) string {
+	msgPrinter := i18n.GetMessagePrinter()
+	msgPrinter.Printf("Verifying public key file ... ")
+	msgPrinter.Println()
+
+	pubKeyFilePath_tmp := WithDefaultEnvVar(&pubKeyFilePath, "HZN_PUBLIC_KEY_FILE")
+	pubKeyFilePath = VerifySigningKeyInput(*pubKeyFilePath_tmp, true)
+	inBytes := ReadFile(pubKeyFilePath)
+	if _, err := verify.ValidKeyOrCert(inBytes); err != nil {
+		Fatal(CLI_INPUT_ERROR, msgPrinter.Sprintf("provided public key is not valid; error: %v", err))
+	}
+	return pubKeyFilePath
+}
+
+func verifyPrivateKeyFormat(keyFile string) {
+	msgPrinter := i18n.GetMessagePrinter()
+	msgPrinter.Printf("Checking private key file format ... ")
+	msgPrinter.Println()
+
+	if _, err := sign.ReadPrivateKey(keyFile); err != nil {
+		Fatal(CLI_INPUT_ERROR, msgPrinter.Sprintf("provided private key is not valid; error: %v", err))
+	}
+}
+
 // get the default private or public key file name
 func GetDefaultSigningKeyFile(isPublic bool) (string, error) {
 	// we have to use $HOME for now because os/user is not implemented on some plateforms
@@ -1338,10 +1341,13 @@ func GetSigningKeys(privKeyFilePath, pubKeyFilePath string) (string, string) {
 	privKeyFilePath_tmp := WithDefaultEnvVar(&privKeyFilePath, "HZN_PRIVATE_KEY_FILE")
 	privKeyFilePath = VerifySigningKeyInput(*privKeyFilePath_tmp, false)
 
+	if privKeyFilePath != "" {
+		verifyPrivateKeyFormat(privKeyFilePath)
+	}
+
 	// get default public key
 	if defaultPublicKey {
-		pubKeyFilePath_tmp := WithDefaultEnvVar(&pubKeyFilePath, "HZN_PUBLIC_KEY_FILE")
-		pubKeyFilePath = VerifySigningKeyInput(*pubKeyFilePath_tmp, true)
+		pubKeyFilePath = GetAndVerifyPublicKey(pubKeyFilePath)
 	}
 	return privKeyFilePath, pubKeyFilePath
 }
@@ -1498,6 +1504,55 @@ func GetHTTPClient(timeout int) *http.Client {
 		},
 	}
 
+}
+
+// create the exchange context with the given user credentail
+func GetUserExchangeContext(userOrg string, credToUse string) exchange.ExchangeContext {
+	var ec exchange.ExchangeContext
+	if credToUse != "" {
+		cred, token := SplitIdToken(credToUse)
+		if userOrg != "" {
+			cred = AddOrg(userOrg, cred)
+		}
+		ec = CreateUserExchangeContext(cred, token)
+	} else {
+		ec = CreateUserExchangeContext("", "")
+	}
+
+	return ec
+}
+
+// create an exchange context based on the user Id and password.
+func CreateUserExchangeContext(userId string, passwd string) exchange.ExchangeContext {
+	// GetExchangeUrl trims the last slash, we need to add it back for the exchange API calls.
+	exchUrl := GetExchangeUrl() + "/"
+	return exchange.NewCustomExchangeContext(userId, passwd, exchUrl, "", NewHTTPClientFactory())
+}
+
+// create an http client factory to be used for the exchange calls.
+func NewHTTPClientFactory() *config.HTTPClientFactory {
+	clientFunc := func(overrideTimeoutS *uint) *http.Client {
+		var timeoutS uint
+		if overrideTimeoutS != nil {
+			timeoutS = *overrideTimeoutS
+		} else {
+			timeoutS = config.HTTPRequestTimeoutS
+		}
+
+		return GetHTTPClient(int(timeoutS))
+	}
+
+	// get retry count and retry interval from env
+	maxRetries, retryInterval, err := GetHttpRetryParameters(5, 2)
+	if err != nil {
+		Fatal(CLI_GENERAL_ERROR, err.Error())
+	}
+
+	return &config.HTTPClientFactory{
+		NewHTTPClient: clientFunc,
+		RetryCount:    maxRetries,
+		RetryInterval: retryInterval,
+	}
 }
 
 // get the http retry count and interval from the env variables.

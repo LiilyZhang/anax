@@ -55,7 +55,7 @@ func (w WorkloadStatus) String() string {
 type DeviceStatus struct {
 	Connectivity map[string]bool  `json:"connectivity"` //  hosts and whether this device can reach them or not
 	Services     []WorkloadStatus `json:"services"`
-	LastUpdated  string           `json:"lastUpdated"`
+	LastUpdated  string           `json:"lastUpdated,omitempty"`
 }
 
 func (w DeviceStatus) String() string {
@@ -340,8 +340,15 @@ func (w *GovernanceWorker) surfaceErrors() int {
 	if err != nil {
 		glog.V(3).Infof(logString(fmt.Sprintf("Error getting persistence device. %v", err)))
 	}
-	errorsHandler := exchange.GetHTTPSurfaceErrorsHandler(w.limitedRetryEC)
+
+	// Grab the current list of surfaced errors from the cached copy in the worker.
+	currentExchangeErrors := &exchange.ExchangeSurfaceError{}
+	cachedObj := w.exchErrors.Get(EXCHANGE_ERRORS)
+	if cachedObj != nil {
+		currentExchangeErrors = cachedObj.(*exchange.ExchangeSurfaceError)
+	}
+
 	putErrorsHandler := exchange.GetHTTPPutSurfaceErrorsHandler(w.limitedRetryEC)
 	serviceResolverHandler := exchange.GetHTTPServiceResolverHandler(w.limitedRetryEC)
-	return exchangesync.UpdateSurfaceErrors(w.db, *pDevice, errorsHandler, putErrorsHandler, serviceResolverHandler, w.BaseWorker.Manager.Config.Edge.SurfaceErrorTimeoutS, w.BaseWorker.Manager.Config.Edge.SurfaceErrorAgreementPersistentS)
+	return exchangesync.UpdateSurfaceErrors(w.db, *pDevice, currentExchangeErrors.ErrorList, putErrorsHandler, serviceResolverHandler, w.BaseWorker.Manager.Config.Edge.SurfaceErrorTimeoutS, w.BaseWorker.Manager.Config.Edge.SurfaceErrorAgreementPersistentS)
 }
