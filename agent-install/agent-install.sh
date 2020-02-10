@@ -7,9 +7,9 @@ set -e
 SCRIPT_VERSION="1.1.0"
 
 SUPPORTED_OS=( "macos" "linux" )
-SUPPORTED_LINUX_DISTRO=( "ubuntu" "raspbian" )
-SUPPORTED_LINUX_VERSION=( "bionic" "xenial" "stretch" )
-SUPPORTED_ARCH=( "amd64" "arm64" "armhf" "ppc64el" )
+SUPPORTED_LINUX_DISTRO=( "ubuntu" "raspbian" "debian" )
+SUPPORTED_LINUX_VERSION=( "bionic" "buster" "xenial" "stretch" )
+SUPPORTED_ARCH=( "amd64" "arm64" "armhf" )
 
 # Defaults
 PKG_PATH="."
@@ -71,9 +71,9 @@ function version() {
 # Exit handling
 function quit(){
   case $1 in
-    1) echo -e "Exiting..."; exit 1
+    1) echo "Exiting..."; exit 1
     ;;
-    2) echo -e "Input error, exiting..."; exit 2
+    2) echo "Input error, exiting..."; exit 2
     ;;
     *) exit
     ;;
@@ -122,7 +122,7 @@ function now() {
 
 function log() {
     if [ $VERBOSITY -ge $1 ]; then
-        echo -e `now` "$2" | fold -w80 -s
+        echo `now` "$2" | fold -w80 -s
     fi
 }
 
@@ -291,6 +291,7 @@ function validate_args(){
 	    fi
 	    PKG_PATH="."
     else
+	    PKG_PATH=$(echo "$PKG_PATH" | sed 's/\/$//')
 	    check_exist d "$PKG_PATH" "The package installation"
     fi
     check_empty "$SKIP_REGISTRATION" "registration flag"
@@ -415,9 +416,10 @@ function install_macos() {
 		set +x
 	fi
 
+	PKG_NAME=$(find . -name "horizon-cli*\.pkg" | sort -V | tail -n 1 | cut -d "/" -f 2)
 	log_info "Detecting packages version..."
-	PACKAGE_VERSION=$(ls ${PACKAGES} | grep horizon-cli- | cut -d'-' -f3 | cut -d'.' -f1-3)
-	ICP_VERSION=$(ls ${PACKAGES} | grep horizon-cli- | cut -d'-' -f4 | cut -d'.' -f1-3)
+	PACKAGE_VERSION=$(echo ${PACKAGES}/$PKG_NAME | cut -d'-' -f3 | cut -d'.' -f1-3)
+	ICP_VERSION=$(echo ${PACKAGES}/$PKG_NAME | cut -d'-' -f4 | cut -d'.' -f1-3)
 
 	log_info "The packages version is ${PACKAGE_VERSION}"
 	log_info "The ICP version is ${ICP_VERSION}"
@@ -440,7 +442,7 @@ function install_macos() {
 		if ! [[ $AGENT_VERSION =~ $re ]] ; then
 			log_info "Something's wrong. Can't get the agent verison, installing it..."
 			set -x
-	        sudo installer -pkg ${PACKAGES}/horizon-cli-*.pkg -target /
+	        sudo installer -pkg ${PACKAGES}/$PKG_NAME -target /
 	        set +x
 		else
 			# compare version for installing and what we have
@@ -463,13 +465,13 @@ function install_macos() {
 					fi
 					log_notify "Installing older packages ${PACKAGE_VERSION}..."
 					set -x
-        			sudo installer -pkg ${PACKAGES}/horizon-cli-*.pkg -target /
+        			sudo installer -pkg ${PACKAGES}/$PKG_NAME -target /
         			set +x
 				else
 					log_info "Installed agent is ${AGENT_VERSION}, package is ${PACKAGE_VERSION}"
 					log_notify "Installing newer package (${PACKAGE_VERSION}) ..."
 					set -x
-        			sudo installer -pkg ${PACKAGES}/horizon-cli-*.pkg -target /
+        			sudo installer -pkg ${PACKAGES}/$PKG_NAME -target /
         			set +x
 				fi
 			fi
@@ -477,7 +479,7 @@ function install_macos() {
 	else
         log_notify "hzn not found, installing it..."
         set -x
-        sudo installer -pkg ${PACKAGES}/horizon-cli-*.pkg -target /
+        sudo installer -pkg ${PACKAGES}/$PKG_NAME -target /
         set +x
 	fi
 
@@ -501,7 +503,7 @@ function install_macos() {
 	    log_info "Creating ${HZN_CONFIG} file..."
         set -x
 	if [ -z "$CERTIFICATE" ]; then
-		echo -e "HZN_EXCHANGE_URL=${HZN_EXCHANGE_URL} \nHZN_FSS_CSSURL=${HZN_FSS_CSSURL} \
+		printf "HZN_EXCHANGE_URL=${HZN_EXCHANGE_URL} \nHZN_FSS_CSSURL=${HZN_FSS_CSSURL} \
 			\nHZN_DEVICE_ID=${HOSTNAME}"  | sudo tee "$HZN_CONFIG"
 	else
 		if [[ ${CERTIFICATE:0:1} != "/" ]]; then
@@ -509,7 +511,7 @@ function install_macos() {
 		else
 			ABS_CERTIFICATE=${CERTIFICATE}
 		fi
-		echo -e "HZN_EXCHANGE_URL=${HZN_EXCHANGE_URL} \nHZN_FSS_CSSURL=${HZN_FSS_CSSURL} \
+		printf "HZN_EXCHANGE_URL=${HZN_EXCHANGE_URL} \nHZN_FSS_CSSURL=${HZN_FSS_CSSURL} \
 			\nHZN_DEVICE_ID=${HOSTNAME} \nHZN_MGMT_HUB_CERT_PATH=${ABS_CERTIFICATE}"  | sudo tee "$HZN_CONFIG"
 	fi
 
@@ -540,6 +542,13 @@ function install_macos() {
     CONFIG_MAC=~/.hzn/hzn.json
     log_info "Configuring hzn..."
     if [[ ! -z "${HZN_EXCHANGE_URL}" ]] && [[ ! -z "${HZN_FSS_CSSURL}" ]]; then
+	    if [ -z "$CERTIFICATE" ]; then
+	        if [[ ${CERTIFICATE:0:1} != "/" ]]; then
+		    ABS_CERTIFICATE=$(pwd)/${CERTIFICATE}
+	        else
+		    ABS_CERTIFICATE=${CERTIFICATE}
+	        fi
+    	    fi
         if [[ -f "$CONFIG_MAC" ]]; then
 	        log_info "${CONFIG_MAC} config file exists, updating..."
             set -x
@@ -549,7 +558,7 @@ function install_macos() {
 		else
 			sed -i.bak -e "s|\"HZN_EXCHANGE_URL\": \"[^ ]*\",|\"HZN_EXCHANGE_URL\": \""$HZN_EXCHANGE_URL"\",|" \
 				-e "s|\"HZN_FSS_CSSURL\": \"[^ ]*\"|\"HZN_FSS_CSSURL\": \""$HZN_FSS_CSSURL"\"|" \
-				-e "s|\"HZN_MGMT_HUB_CERT_PATH\": \"[^ ]*\"|\"HZN_MGMT_HUB_CERT_PATH\": \"$(pwd)"/$CERTIFICATE"\"|" "$CONFIG_MAC"
+				-e "s|\"HZN_MGMT_HUB_CERT_PATH\": \"[^ ]*\"|\"HZN_MGMT_HUB_CERT_PATH\": \""$ABS_CERTIFICATE"\"|" "$CONFIG_MAC"
 		fi
             set +x
             log_info "Config updated"
@@ -558,9 +567,9 @@ function install_macos() {
             set -x
             mkdir -p "$(dirname "$CONFIG_MAC")"
 		if [ -z "$CERTIFICATE" ]; then
-			echo -e "{\n  \"HZN_EXCHANGE_URL\": \""$HZN_EXCHANGE_URL"\",\n  \"HZN_FSS_CSSURL\": \""$HZN_FSS_CSSURL"\"}" > "$CONFIG_MAC"
+			printf "{\n  \"HZN_EXCHANGE_URL\": \""$HZN_EXCHANGE_URL"\",\n  \"HZN_FSS_CSSURL\": \""$HZN_FSS_CSSURL"\"\n}" > "$CONFIG_MAC"
 		else
-			echo -e "{\n  \"HZN_EXCHANGE_URL\": \""$HZN_EXCHANGE_URL"\",\n  \"HZN_FSS_CSSURL\": \""$HZN_FSS_CSSURL"\",\n  \"HZN_MGMT_HUB_CERT_PATH\": \"$(pwd)/"$CERTIFICATE"\"}" > "$CONFIG_MAC"
+			printf "{\n  \"HZN_EXCHANGE_URL\": \""$HZN_EXCHANGE_URL"\",\n  \"HZN_FSS_CSSURL\": \""$HZN_FSS_CSSURL"\",\n  \"HZN_MGMT_HUB_CERT_PATH\": \""$ABS_CERTIFICATE"\"\n}" > "$CONFIG_MAC"
 		fi
             set +x
             log_info "Config created"
@@ -813,7 +822,7 @@ function start_horizon_service(){
 
 		   	start_horizon_container_check=`date +%s`
 
-		    while [ -z "$(docker exec -ti horizon1 curl http://localhost:8510/status | jq -r .configuration.preferred_exchange_version 2>/dev/null)" ] ; do
+		    while [ -z "$(hzn node list | jq -r .configuration.preferred_exchange_version 2>/dev/null)" ] ; do
 		    	current_horizon_container_check=`date +%s`
 				log_info "the horizon-container with anax is not ready, retry in 10 seconds"
 				if (( current_horizon_container_check - start_horizon_container_check > 300 )); then
@@ -866,7 +875,7 @@ function process_node(){
 	# Checking node state
 	NODE_STATE=$(hzn node list | jq -r .configstate.state)
 	WORKLOADS=$(hzn agreement list | jq -r .[])
-	if [[ "$NODE_ID" = "" ]] || [[ ! $OVERWRITE_NODE = "true" ]]; then
+	if [[ "$NODE_ID" == "" ]] && [[ ! $OVERWRITE_NODE == "true" ]]; then
 		NODE_ID=$(hzn node list | jq -r .id)
 		log_notify "Registering node with existing id $NODE_ID"
 	fi
@@ -1346,9 +1355,9 @@ function find_node_id() {
 			find_node_ip_address
 			for IP in $(echo $NODE_IP); do
 				ID_LINE=$(grep "$IP" "$NODE_ID_MAPPING_FILE" || [[ $? == 1 ]] )
-				if [ ! -z $ID_LINE ];then break; fi
+				if [[ ! "$ID_LINE" = "" ]];then break; fi
 			done
-			if [ ! -z $ID_LINE ]; then
+			if [[ ! "$ID_LINE" = "" ]]; then
 				NODE_ID=$(echo $ID_LINE | cut -d "," -f 2)
 			else
 				log_notify "Failed to find node id in mapping file $NODE_ID_MAPPING_FILE with $(hostname) or $NODE_IP"
@@ -1412,6 +1421,7 @@ done
 if [ -f "$AGENT_INSTALL_ZIP" ]; then
 	unzip_install_files
 	find_node_id
+	NODE_ID=$(echo "$NODE_ID" | sed -e 's/^[[:space:]]*//' | sed -e 's/[[:space:]]*$//' )
 	if [[ $NODE_ID != "" ]]; then
 		log_info "Found node id $NODE_ID"
 	fi
