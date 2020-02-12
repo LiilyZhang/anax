@@ -112,8 +112,9 @@ func (w *BaseProducerProtocolHandler) sendMessage(mt interface{}, pay []byte) er
 
 	// Demarshal the receiver's public key if we need to
 	if messageTarget.ReceiverPublicKeyObj == nil {
-		if mtpk, err := exchange.DemarshalPublicKey(messageTarget.ReceiverPublicKeyBytes); err != nil {
-			return errors.New(fmt.Sprintf("Unable to demarshal device's public key %x, error %v", messageTarget.ReceiverPublicKeyBytes, err))
+		publicKeyBytes := []byte(messageTarget.ReceiverPublicKeyBytes)
+		if mtpk, err := exchange.DemarshalPublicKey(publicKeyBytes); err != nil {
+			return errors.New(fmt.Sprintf("Unable to demarshal device's public key %s, error %v", messageTarget.ReceiverPublicKeyBytes, err))
 		} else {
 			messageTarget.ReceiverPublicKeyObj = mtpk
 		}
@@ -259,7 +260,7 @@ func (w *BaseProducerProtocolHandler) HandleProposal(ph abstractprotocol.Protoco
 				proposal.ConsumerId(),
 				proposal.Protocol())
 			handled = true
-		} else if messageTarget, err := exchange.CreateMessageTarget(exchangeMsg.AgbotId, nil, exchangeMsg.AgbotPubKey, ""); err != nil {
+		} else if messageTarget, err := exchange.CreateMessageTarget(exchangeMsg.AgbotId, nil, string(exchangeMsg.AgbotPubKey), ""); err != nil {
 			glog.Errorf(BPPHlogString(w.Name(), fmt.Sprintf("error creating message target: %v", err)))
 			err_log_event = fmt.Sprintf("Error creating message target: %v", err)
 		} else {

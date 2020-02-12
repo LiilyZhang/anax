@@ -52,7 +52,7 @@ type ConsumerProtocolHandler interface {
 	CreateMeteringNotification(mp policy.Meter, agreement *persistence.Agreement) (*metering.MeteringNotification, error)
 	TerminateAgreement(agreement *persistence.Agreement, reason uint, workerId string)
 	VerifyAgreement(ag *persistence.Agreement, cph ConsumerProtocolHandler)
-	GetDeviceMessageEndpoint(deviceId string, workerId string) (string, []byte, error)
+	GetDeviceMessageEndpoint(deviceId string, workerId string) (string, string, error)
 	SetBlockchainClientAvailable(ev *events.BlockchainClientInitializedMessage)
 	SetBlockchainClientNotAvailable(ev *events.BlockchainClientStoppingMessage)
 	SetBlockchainWritable(ev *events.AccountFundedMessage)
@@ -144,8 +144,9 @@ func (w *BaseConsumerProtocolHandler) sendMessage(mt interface{}, pay []byte) er
 
 	// Demarshal the receiver's public key if we need to
 	if messageTarget.ReceiverPublicKeyObj == nil {
-		if mtpk, err := exchange.DemarshalPublicKey(messageTarget.ReceiverPublicKeyBytes); err != nil {
-			return errors.New(fmt.Sprintf("Unable to demarshal device's public key %x, error %v", messageTarget.ReceiverPublicKeyBytes, err))
+		publicKeyBytes := []byte(messageTarget.ReceiverPublicKeyBytes)
+		if mtpk, err := exchange.DemarshalPublicKey(publicKeyBytes); err != nil {
+			return errors.New(fmt.Sprintf("Unable to demarshal device's public key %s, error %v", messageTarget.ReceiverPublicKeyBytes, err))
 		} else {
 			messageTarget.ReceiverPublicKeyObj = mtpk
 		}
@@ -560,12 +561,12 @@ func (b *BaseConsumerProtocolHandler) VerifyAgreement(ag *persistence.Agreement,
 
 }
 
-func (b *BaseConsumerProtocolHandler) GetDeviceMessageEndpoint(deviceId string, workerId string) (string, []byte, error) {
+func (b *BaseConsumerProtocolHandler) GetDeviceMessageEndpoint(deviceId string, workerId string) (string, string, error) {
 
 	glog.V(5).Infof(BCPHlogstring2(workerId, fmt.Sprintf("retrieving device %v msg endpoint from exchange", deviceId)))
 
 	if dev, err := b.getDevice(deviceId, workerId); err != nil {
-		return "", nil, err
+		return "", "", err
 	} else {
 		glog.V(5).Infof(BCPHlogstring2(workerId, fmt.Sprintf("retrieved device %v msg endpoint from exchange %v", deviceId, dev.MsgEndPoint)))
 		return dev.MsgEndPoint, dev.PublicKey, nil

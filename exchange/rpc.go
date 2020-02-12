@@ -88,7 +88,7 @@ type SearchResultDevice struct {
 	Name        string         `json:"name"`
 	Services    []Microservice `json:"services"`
 	MsgEndPoint string         `json:"msgEndPoint"`
-	PublicKey   []byte         `json:"publicKey"`
+	PublicKey   string         `json:"publicKey"`
 }
 
 func (d SearchResultDevice) String() string {
@@ -139,7 +139,7 @@ type Device struct {
 	MsgEndPoint        string             `json:"msgEndPoint"`
 	SoftwareVersions   SoftwareVersion    `json:"softwareVersions"`
 	LastHeartbeat      string             `json:"lastHeartbeat"`
-	PublicKey          []byte             `json:"publicKey"`
+	PublicKey          string             `json:"publicKey"`
 	Arch               string             `json:"arch"`
 	UserInput          []policy.UserInput `json:"userInput"`
 	HeartbeatIntv      HeartbeatIntervals `json:"heartbeatIntervals,omitempty"`
@@ -375,11 +375,11 @@ func CreatePostMessage(msg []byte, ttl int) *PostMessage {
 type ExchangeMessageTarget struct {
 	ReceiverExchangeId     string // in the form org/id
 	ReceiverPublicKeyObj   *rsa.PublicKey
-	ReceiverPublicKeyBytes []byte
+	ReceiverPublicKeyBytes string
 	ReceiverMsgEndPoint    string
 }
 
-func CreateMessageTarget(receiverId string, receiverPubKey *rsa.PublicKey, receiverPubKeySerialized []byte, receiverMessageEndpoint string) (*ExchangeMessageTarget, error) {
+func CreateMessageTarget(receiverId string, receiverPubKey *rsa.PublicKey, receiverPubKeySerialized string, receiverMessageEndpoint string) (*ExchangeMessageTarget, error) {
 	if len(receiverMessageEndpoint) == 0 && receiverPubKey == nil && len(receiverPubKeySerialized) == 0 {
 		return nil, errors.New(fmt.Sprintf("Must specify either one of the public key inputs OR the message endpoint input for the message receiver %v", receiverId))
 	} else if len(receiverMessageEndpoint) != 0 && (receiverPubKey != nil || len(receiverPubKeySerialized) != 0) {
