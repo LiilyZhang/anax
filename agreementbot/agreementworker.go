@@ -557,7 +557,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 		glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error persisting agreement attempt: %v", err)))
 
 		// Create message target for protocol message
-	} else if mt, err := exchange.CreateMessageTarget(wi.Device.Id, nil, wi.Device.PublicKey, wi.Device.MsgEndPoint); err != nil {
+	} else if mt, err := exchange.CreateMessageTarget(wi.Device.Id, nil, []byte(wi.Device.PublicKey), wi.Device.MsgEndPoint); err != nil {
 		glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error creating message target: %v", err)))
 
 		// Initiate the protocol
@@ -744,7 +744,7 @@ func (b *BaseAgreementWorker) HandleAgreementReply(cph ConsumerProtocolHandler, 
 
 			// Send the reply Ack if it's still valid.
 			if ackReplyAsValid {
-				if mt, err := exchange.CreateMessageTarget(wi.SenderId, nil, string(wi.SenderPubKey), wi.From); err != nil {
+				if mt, err := exchange.CreateMessageTarget(wi.SenderId, nil, wi.SenderPubKey, wi.From); err != nil {
 					glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error creating message target: %v", err)))
 				} else if err := protocolHandler.Confirm(ackReplyAsValid, reply.AgreementId(), mt, cph.GetSendMessage()); err != nil {
 					glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error trying to send reply ack for %v to %v, error: %v", reply.AgreementId(), mt, err)))
@@ -772,7 +772,7 @@ func (b *BaseAgreementWorker) HandleAgreementReply(cph ConsumerProtocolHandler, 
 
 		// Always send an ack for a reply with a positive decision in it
 		if !ackReplyAsValid && sendReply {
-			if mt, err := exchange.CreateMessageTarget(wi.SenderId, nil, string(wi.SenderPubKey), wi.From); err != nil {
+			if mt, err := exchange.CreateMessageTarget(wi.SenderId, nil, wi.SenderPubKey, wi.From); err != nil {
 				glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error creating message target: %v", err)))
 			} else if err := protocolHandler.Confirm(ackReplyAsValid, reply.AgreementId(), mt, cph.GetSendMessage()); err != nil {
 				glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error trying to send reply ack for %v to %v, error: %v", reply.AgreementId(), wi.From, err)))

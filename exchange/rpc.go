@@ -375,11 +375,11 @@ func CreatePostMessage(msg []byte, ttl int) *PostMessage {
 type ExchangeMessageTarget struct {
 	ReceiverExchangeId     string // in the form org/id
 	ReceiverPublicKeyObj   *rsa.PublicKey
-	ReceiverPublicKeyBytes string
+	ReceiverPublicKeyBytes []byte
 	ReceiverMsgEndPoint    string
 }
 
-func CreateMessageTarget(receiverId string, receiverPubKey *rsa.PublicKey, receiverPubKeySerialized string, receiverMessageEndpoint string) (*ExchangeMessageTarget, error) {
+func CreateMessageTarget(receiverId string, receiverPubKey *rsa.PublicKey, receiverPubKeySerialized []byte, receiverMessageEndpoint string) (*ExchangeMessageTarget, error) {
 	if len(receiverMessageEndpoint) == 0 && receiverPubKey == nil && len(receiverPubKeySerialized) == 0 {
 		return nil, errors.New(fmt.Sprintf("Must specify either one of the public key inputs OR the message endpoint input for the message receiver %v", receiverId))
 	} else if len(receiverMessageEndpoint) != 0 && (receiverPubKey != nil || len(receiverPubKeySerialized) != 0) {

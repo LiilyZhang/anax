@@ -112,7 +112,7 @@ func (w *AgreementBotWorker) GovernAgreements() int {
 										// we get an ack to our verification message.
 										if whisperTo, pubkeyTo, err := protocolHandler.GetDeviceMessageEndpoint(ag.DeviceId, "Governance"); err != nil {
 											glog.Errorf(logString(fmt.Sprintf("error obtaining message target for data notification: %v", err)))
-										} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, pubkeyTo, whisperTo); err != nil {
+										} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, []byte(pubkeyTo), whisperTo); err != nil {
 											glog.Errorf(logString(fmt.Sprintf("error creating message target: %v", err)))
 										} else if err := protocolHandler.AgreementProtocolHandler("", "", "").NotifyDataReceipt(ag.CurrentAgreementId, mt, protocolHandler.GetSendMessage()); err != nil {
 											glog.Errorf(logString(fmt.Sprintf("unable to send data notification, error: %v", err)))
@@ -136,7 +136,7 @@ func (w *AgreementBotWorker) GovernAgreements() int {
 												glog.Errorf(logString(fmt.Sprintf("unable to create metering notification, error: %v", err)))
 											} else if whisperTo, pubkeyTo, err := protocolHandler.GetDeviceMessageEndpoint(ag.DeviceId, "Governance"); err != nil {
 												glog.Errorf(logString(fmt.Sprintf("error obtaining message target for metering notification: %v", err)))
-											} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, pubkeyTo, whisperTo); err != nil {
+											} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, []byte(pubkeyTo), whisperTo); err != nil {
 												glog.Errorf(logString(fmt.Sprintf("error creating message target: %v", err)))
 											} else if msg, err := protocolHandler.AgreementProtocolHandler(bcType, bcName, bcOrg).NotifyMetering(ag.CurrentAgreementId, mn, mt, protocolHandler.GetSendMessage()); err != nil {
 												glog.Errorf(logString(fmt.Sprintf("unable to send metering notification, error: %v", err)))

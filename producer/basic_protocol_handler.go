@@ -81,7 +81,7 @@ func (c *BasicProtocolHandler) TerminateAgreement(ag *persistence.EstablishedAgr
 	var messageTarget interface{}
 	if whisperTo, pubkeyTo, err := c.BaseProducerProtocolHandler.GetAgbotMessageEndpoint(ag.ConsumerId); err != nil {
 		glog.Errorf(BPHlogString(fmt.Sprintf("error obtaining message target for agreement %v cancel: %v", ag.CurrentAgreementId, err)))
-	} else if mt, err := exchange.CreateMessageTarget(ag.ConsumerId, nil, string(pubkeyTo), whisperTo); err != nil {
+	} else if mt, err := exchange.CreateMessageTarget(ag.ConsumerId, nil, pubkeyTo, whisperTo); err != nil {
 		glog.Errorf(BPHlogString(fmt.Sprintf("error creating message target: %v", err)))
 	} else {
 		messageTarget = mt
@@ -92,7 +92,7 @@ func (c *BasicProtocolHandler) TerminateAgreement(ag *persistence.EstablishedAgr
 func (c *BasicProtocolHandler) VerifyAgreement(ag *persistence.EstablishedAgreement) (bool, error) {
 	if _, pubkey, err := c.BaseProducerProtocolHandler.GetAgbotMessageEndpoint(ag.ConsumerId); err != nil {
 		return false, errors.New(BPHlogString(fmt.Sprintf("error getting agbot message target: %v", err)))
-	} else if mt, err := exchange.CreateMessageTarget(ag.ConsumerId, nil, string(pubkey), ""); err != nil {
+	} else if mt, err := exchange.CreateMessageTarget(ag.ConsumerId, nil, pubkey, ""); err != nil {
 		return false, errors.New(BPHlogString(fmt.Sprintf("error creating message target: %v", err)))
 	} else if recorded, err := c.agreementPH.VerifyAgreement(ag.CurrentAgreementId, ag.CounterPartyAddress, ag.ProposalSig, mt, c.GetSendMessage()); err != nil {
 		return false, errors.New(BPHlogString(fmt.Sprintf("encountered error verifying agreement %v, error %v", ag.CurrentAgreementId, err)))
@@ -126,7 +126,7 @@ func (c *BasicProtocolHandler) HandleExtensionMessages(msg *events.ExchangeDevic
 		if sendReply {
 			if _, pubkey, err := c.BaseProducerProtocolHandler.GetAgbotMessageEndpoint(msg.AgbotId()); err != nil {
 				glog.Errorf(BPHlogString(fmt.Sprintf("error getting agbot message target: %v", err)))
-			} else if mt, err := exchange.CreateMessageTarget(msg.AgbotId(), nil, string(pubkey), ""); err != nil {
+			} else if mt, err := exchange.CreateMessageTarget(msg.AgbotId(), nil, pubkey, ""); err != nil {
 				glog.Errorf(BPHlogString(fmt.Sprintf("error creating message target: %v", err)))
 			} else if err := c.agreementPH.SendAgreementVerificationReply(verify.AgreementId(), exists, mt, c.GetSendMessage()); err != nil {
 				glog.Errorf(BPHlogString(fmt.Sprintf("error sending verify response for agreement %v, error %v", verify.AgreementId(), err)))

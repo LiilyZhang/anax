@@ -553,7 +553,7 @@ func (b *BaseConsumerProtocolHandler) VerifyAgreement(ag *persistence.Agreement,
 		glog.Warningf(BCPHlogstring(b.Name(), fmt.Sprintf("for %v agreement protocol handler not ready", ag.CurrentAgreementId)))
 	} else if whisperTo, pubkeyTo, err := b.GetDeviceMessageEndpoint(ag.DeviceId, b.Name()); err != nil {
 		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error obtaining message target for verify message: %v", err)))
-	} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, pubkeyTo, whisperTo); err != nil {
+	} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, []byte(pubkeyTo), whisperTo); err != nil {
 		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error creating message target: %v", err)))
 	} else if _, err := aph.VerifyAgreement(ag.CurrentAgreementId, "", "", mt, b.GetSendMessage()); err != nil {
 		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error terminating agreement %v on the blockchain: %v", ag.CurrentAgreementId, err)))

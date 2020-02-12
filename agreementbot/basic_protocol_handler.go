@@ -40,7 +40,7 @@ func NewBasicProtocolHandler(name string, cfg *config.HorizonConfig, db persiste
 			},
 			agreementPH: basicprotocol.NewProtocolHandler(cfg.Collaborators.HTTPClientFactory.NewHTTPClient(nil), pm),
 			// Allow the main agbot thread to quickly distribute work in batches and then continue processing on the main thread.
-			Work:        make(chan AgreementWork, cfg.GetAgbotAgreementBatchSize()*2),
+			Work: make(chan AgreementWork, cfg.GetAgbotAgreementBatchSize()*2),
 		}
 	} else {
 		return nil
@@ -129,7 +129,7 @@ func (c *BasicProtocolHandler) TerminateAgreement(ag *persistence.Agreement, rea
 	var messageTarget interface{}
 	if whisperTo, pubkeyTo, err := c.BaseConsumerProtocolHandler.GetDeviceMessageEndpoint(ag.DeviceId, workerId); err != nil {
 		glog.Errorf(BCPHlogstring2(workerId, fmt.Sprintf("error obtaining message target for cancel message: %v", err)))
-	} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, pubkeyTo, whisperTo); err != nil {
+	} else if mt, err := exchange.CreateMessageTarget(ag.DeviceId, nil, []byte(pubkeyTo), whisperTo); err != nil {
 		glog.Errorf(BCPHlogstring2(workerId, fmt.Sprintf("error creating message target: %v", err)))
 	} else {
 		messageTarget = mt

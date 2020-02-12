@@ -180,7 +180,7 @@ func (a *BasicAgreementWorker) start(work chan AgreementWork, random *rand.Rand)
 
 			// Reply to the sender with our decision on the agreement.
 			if sendReply {
-				if mt, err := exchange.CreateMessageTarget(wi.SenderId, nil, string(wi.SenderPubKey), wi.From); err != nil {
+				if mt, err := exchange.CreateMessageTarget(wi.SenderId, nil, wi.SenderPubKey, wi.From); err != nil {
 					glog.Errorf(bwlogstring(a.workerID, fmt.Sprintf("error creating message target: %v", err)))
 				} else if aph, ok := a.protocolHandler.AgreementProtocolHandler("", "", "").(*basicprotocol.ProtocolHandler); !ok {
 					glog.Errorf(bwlogstring(a.workerID, fmt.Sprintf("error casting to basic protocol handler (%T): %v", a.protocolHandler.AgreementProtocolHandler("", "", ""), err)))

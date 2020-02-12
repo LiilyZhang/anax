@@ -260,7 +260,7 @@ func (w *BaseProducerProtocolHandler) HandleProposal(ph abstractprotocol.Protoco
 				proposal.ConsumerId(),
 				proposal.Protocol())
 			handled = true
-		} else if messageTarget, err := exchange.CreateMessageTarget(exchangeMsg.AgbotId, nil, string(exchangeMsg.AgbotPubKey), ""); err != nil {
+		} else if messageTarget, err := exchange.CreateMessageTarget(exchangeMsg.AgbotId, nil, exchangeMsg.AgbotPubKey, ""); err != nil {
 			glog.Errorf(BPPHlogString(w.Name(), fmt.Sprintf("error creating message target: %v", err)))
 			err_log_event = fmt.Sprintf("Error creating message target: %v", err)
 		} else {
