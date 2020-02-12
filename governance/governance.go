@@ -913,7 +913,7 @@ func (w *GovernanceWorker) CommandHandler(command worker.Command) bool {
 				} else if _, err := persistence.AgreementStateDataReceived(w.db, dataReceived.AgreementId(), msgProtocol); err != nil {
 					glog.Errorf(logString(fmt.Sprintf("unable to update data received time for %v, error: %v", dataReceived.AgreementId(), err)))
 					err_log_msg = fmt.Sprintf("Unable to update data received time for %v, error: %v", dataReceived.AgreementId(), err)
-				} else if messageTarget, err := exchange.CreateMessageTarget(exchangeMsg.AgbotId, nil, exchangeMsg.AgbotPubKey, ""); err != nil {
+				} else if messageTarget, err := exchange.CreateMessageTarget(exchangeMsg.AgbotId, nil, string(exchangeMsg.AgbotPubKey), ""); err != nil {
 					glog.Errorf(logString(fmt.Sprintf("error creating message target: %v", err)))
 					err_log_msg = fmt.Sprintf("Error creating message target: %v", err)
 				} else if err := protocolHandler.NotifyDataReceiptAck(dataReceived.AgreementId(), messageTarget, w.producerPH[msgProtocol].GetSendMessage()); err != nil {
