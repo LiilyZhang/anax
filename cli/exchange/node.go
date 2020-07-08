@@ -2,19 +2,24 @@ package exchange
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
+	"os"
+	"strings"
+
 	"github.com/open-horizon/anax/cli/cliconfig"
 	"github.com/open-horizon/anax/cli/cliutils"
 	"github.com/open-horizon/anax/compcheck"
+	"github.com/open-horizon/anax/cutil"
 	"github.com/open-horizon/anax/exchange"
 	"github.com/open-horizon/anax/externalpolicy"
 	_ "github.com/open-horizon/anax/externalpolicy/text_language"
 	"github.com/open-horizon/anax/i18n"
 	"github.com/open-horizon/anax/persistence"
 	"github.com/open-horizon/anax/policy"
-	"net/http"
-	"os"
+	"github.com/open-horizon/anax/semanticversion"
 )
 
 type ExchangeNodes struct {
@@ -231,6 +236,77 @@ func NodeUpdate(org string, credToUse string, node string, filePath string) {
 			}
 
 			verifyNodeUserInput(org, credToUse, node, nId, ui)
+
+			// Issue 1081
+			nodePatternString := ""
+			for _, nod := range nodes {
+				nodePatternString = nod.Pattern
+			}
+			var topLevelServices []ServiceReference
+			patternUserInputsMap := make(map[string]policy.UserInput)
+			userInputWithEmptyDefaultValueMap := make(map[string][]exchange.UserInput)
+
+			if nodePatternString != "" {
+				patOrg, patternName := cliutils.TrimOrg(org, nodePatternString)
+				var patternsResp ExchangePatterns
+				// Get exchange pattern
+				httpCode := cliutils.ExchangeGet("Exchange", cliutils.GetExchangeUrl(), "orgs/"+patOrg+"/patterns"+cliutils.AddSlash(patternName), cliutils.OrgAndCreds(org, credToUse), []int{200, 404}, &patternsResp)
+				if httpCode == 404 {
+					cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("Pattern %v of the node does not exist for org: %v \n", nodePatternString, patOrg))
+				}
+
+				patterns := patternsResp.Patterns
+				if len(patterns) != 1 {
+					cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("Expecting 1 pattern with name %v, but get %d patterns", nodePatternString, len(nodes)))
+				}
+
+				pattern, _ := patterns[nodePatternString]
+				topLevelServices = pattern.Services
+				patternUserInputs := pattern.UserInput
+
+				for _, u := range patternUserInputs {
+					mapKey := fmt.Sprintf("%v/%v", u.ServiceOrgid, u.ServiceUrl)
+					patternUserInputsMap[mapKey] = u
+				}
+
+				ec := cliutils.GetUserExchangeContext(org, credToUse)
+				getServiceHandler := exchange.GetHTTPServiceHandler(ec)
+
+				// if there are userinput with no default value, and value is not defined in pattern userinput, userinput from command line cannot be empty
+				_, err := getUserInputWithEmptyDefaultValue(getServiceHandler, topLevelServices, patternUserInputsMap, userInputWithEmptyDefaultValueMap)
+				if err == nil && len(userInputWithEmptyDefaultValueMap) != 0 {
+					if len(ui) == 0 {
+						cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("Userinput cannot be set to empty list because some userinputs have no default value from service and pattern "))
+					}
+				} else if err != nil {
+					cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("%v", err))
+				}
+			}
+
+			if len(ui) != 0 {
+				// make a map
+				userInputsMap := make(map[string]policy.UserInput)
+				for _, u := range ui {
+					// validate u has serviceOrg and serviceUrl
+					if u.ServiceOrgid == "" || u.ServiceUrl == "" {
+						cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("ServiceOrgid and ServiceUrl need to be set in userinput"))
+					}
+					mapKey := fmt.Sprintf("%v/%v", u.ServiceOrgid, u.ServiceUrl)
+					userInputsMap[mapKey] = u
+				}
+
+				for _, u := range ui {
+					uInput := u
+					validated, warningMessage, err := ValidateUserInput(org, credToUse, uInput, nodePatternString, topLevelServices, userInputsMap, patternUserInputsMap, userInputWithEmptyDefaultValueMap)
+					if !validated {
+						cliutils.Fatal(cliutils.CLI_INPUT_ERROR, msgPrinter.Sprintf("Unable to validate exchange node userInput, error: %v", err))
+					} else if warningMessage != "" { // validate == true, but give back warning error message
+						cliutils.Warning(msgPrinter.Sprintf("validate exchange node/userinput %v ", warningMessage))
+					}
+
+				}
+			}
+
 			patch[k] = ui
 		} else if k == "pattern" {
 			pattern := ""
@@ -627,4 +703,269 @@ func verifyNodeUserInput(org string, credToUse string, node exchange.Device, nId
 		}
 		cliutils.Fatal(cliutils.CLI_GENERAL_ERROR, msgPrinter.Sprintf("Unable to update the node because of the above error."))
 	}
+}
+
+func ValidateUserInput(org string, credToUse string, userInput policy.UserInput, nodePattern string, topLevelServices []ServiceReference, userInputsMap map[string]policy.UserInput, patternUserInputsMap map[string]policy.UserInput, userInputWithEmptyDefaultValueMap map[string][]exchange.UserInput) (bool, string, error) {
+	msgPrinter := i18n.GetMessagePrinter()
+	warningMessage := ""
+
+	serviceOrg := userInput.ServiceOrgid
+	serviceUrl := userInput.ServiceUrl
+	serviceVersionRange := userInput.ServiceVersionRange
+	serviceArch := userInput.ServiceArch
+
+	msgPrinter.Printf("Start validating userinput %v, %v, %v, %v", serviceOrg, serviceUrl, serviceVersionRange, serviceArch)
+	msgPrinter.Println()
+
+	var errorString string
+	if &userInput.ServiceVersionRange == nil || userInput.ServiceVersionRange == "" {
+		def := "0.0.0"
+		serviceVersionRange = def
+	}
+
+	// Convert the version to a version expression.
+	vExp, err := semanticversion.Version_Expression_Factory(serviceVersionRange)
+	if err != nil {
+		errorString = msgPrinter.Sprintf("versionRange %v cannot be converted to a version expression, error %v", userInput.ServiceVersionRange, err)
+		return false, warningMessage, errors.New(errorString)
+	}
+	serviceVersion := vExp.Get_expression()
+
+	ec := cliutils.GetUserExchangeContext(org, credToUse)
+	getServiceHandler := exchange.GetHTTPServiceHandler(ec)
+	// service exist
+	svsd, _, err := getServiceHandler(serviceUrl, serviceOrg, serviceVersion, serviceArch)
+	if svsd == nil || err != nil {
+		return false, warningMessage, err
+	}
+
+	// Need to check:
+	// 1) if service is top level service
+	// 2) or recursively check if service defined in dependent service
+	// 3) if service range of the dependent service has intersection with versionRange of service from userInput
+	// 4) For services (toplevel service and required services) that have userinput without default value, it should be set in userinput from user
+	found := false
+	if &topLevelServices != nil && len(topLevelServices) != 0 {
+		for _, topLevelService := range topLevelServices {
+			topLevelServiceVersionNumber := topLevelService.ServiceVersions[0].Version
+			servDefmap, tlService, tlServiceId, err := exchange.ServiceDefResolver(topLevelService.ServiceURL, topLevelService.ServiceOrg, topLevelServiceVersionNumber, topLevelService.ServiceArch, getServiceHandler)
+			if tlService == nil || err != nil {
+				return false, warningMessage, errors.New(msgPrinter.Sprintf("toplevel service does not exist %v, %v, %v, %v", topLevelService.ServiceOrg, topLevelService.ServiceURL, topLevelService.ServiceArch, topLevelServiceVersionNumber))
+			}
+			// add toplevel service back to servDefmap
+			servDefmap[tlServiceId] = *tlService
+			//fmt.Printf("****************** tlServiceId is: %s ***********************\n", tlServiceId)
+
+			// servId is in format: serviceOrg/serviceUrl/serviceArch/serviceVersion
+			for servId, serviceDef := range servDefmap {
+				compareResult, err := compareUserInput(tlService.UserInputs, userInput.Inputs)
+				if !compareResult {
+					errorString = msgPrinter.Sprintf("Failed to compare given userInput with service userInput, error: %v", err)
+					return false, warningMessage, errors.New(errorString)
+				} else if err != nil {
+					// give back a warning
+					warningMessage = msgPrinter.Sprintf("For service %v %v %v, got warning message: %v", serviceOrg, serviceUrl, serviceArch, err.Error())
+				}
+
+				serviceInfos := strings.Split(servId, "/")
+				if len(serviceInfos) == 0 {
+					errorString = msgPrinter.Sprintf("Failed to get service informaton for %s", servId)
+					return false, warningMessage, errors.New(errorString)
+				}
+
+				respServiceOrg := serviceInfos[0]
+				mapKey := fmt.Sprintf("%v/%v", respServiceOrg, serviceDef.URL)
+				emptyDefaultValueUserInput, ok := userInputWithEmptyDefaultValueMap[mapKey]
+
+				// if !ok, means all the default value are set either from service or pattern userinput
+				if ok {
+					u, inCmdUserInput := userInputsMap[mapKey]
+					if !inCmdUserInput {
+						return false, warningMessage, errors.New(msgPrinter.Sprintf("%v %v has userInput that need to be set because they have no default value.", topLevelService.ServiceOrg, topLevelService.ServiceURL))
+					} else {
+						for _, emptyDefaultValue := range emptyDefaultValueUserInput {
+							if definedInCmdUserInput, err := cmdInputsContains(u.Inputs, emptyDefaultValue.Name); !definedInCmdUserInput {
+								return false, warningMessage, errors.New(msgPrinter.Sprintf("%v", err))
+							}
+						}
+					}
+				}
+
+				if serviceOrg == respServiceOrg && serviceUrl == serviceDef.URL {
+					if withinRange, _ := vExp.Is_within_range(serviceDef.Version); withinRange == true {
+						found = true
+					}
+				}
+			}
+
+		}
+
+		if !found {
+			errorString = msgPrinter.Sprintf("Service %v %v %v %v in userInput is not defined in pattern %v or its dependent services", serviceOrg, serviceUrl, serviceArch, vExp.Get_expression(), nodePattern)
+			return false, warningMessage, errors.New(errorString)
+		}
+	} else {
+		if checkDefaultValueInServiceUserInput, err := checkDefaultValueInServiceUserInput(svsd.UserInputs, userInput.Inputs); !checkDefaultValueInServiceUserInput {
+			warningMessage = msgPrinter.Sprintf("%vWarning: %v", warningMessage, err)
+		}
+	}
+
+	return true, warningMessage, nil
+}
+
+func compareUserInput(sdefUserInputs []exchange.UserInput, cmdUserInputs []policy.Input) (bool, error) {
+	msgPrinter := i18n.GetMessagePrinter()
+	serviceUserInputsMap := make(map[string]exchange.UserInput)
+	var serviceInputName string
+	var serviceInput exchange.UserInput
+	var errorString string
+
+	for _, serviceInput = range sdefUserInputs {
+		serviceInputName = serviceInput.Name
+		serviceUserInputsMap[serviceInputName] = serviceInput
+	}
+
+	// return true with warning message if the variables in userInput.Inputs are not defined in service, also check values are correct types
+	var policyInputName string
+	var policyInputValue interface{}
+	var ok bool
+	var inputNameNotDefinedInService []string
+
+	for _, policyInput := range cmdUserInputs {
+		policyInputName = policyInput.Name
+		policyInputValue = policyInput.Value
+
+		serviceInput, ok = serviceUserInputsMap[policyInputName]
+		if !ok {
+			// give back a warning
+			inputNameNotDefinedInService = append(inputNameNotDefinedInService, policyInputName)
+		} else {
+			if err := cutil.VerifyWorkloadVarTypes(policyInputValue, serviceInput.Type); err != nil {
+				errorString = msgPrinter.Sprintf("Error validating the type of userInput variable %v. error: %v", policyInputName, err)
+				return false, errors.New(errorString)
+			}
+		}
+	}
+
+	if len(inputNameNotDefinedInService) != 0 {
+		errorString = msgPrinter.Sprintf("The following variables are not defined in userInput for service in its highest version: %v \n", inputNameNotDefinedInService)
+		return true, errors.New(errorString)
+	}
+	return true, nil
+
+}
+
+func sliceContains(sliceToCheck []string, elem string) bool {
+	for _, e := range sliceToCheck {
+		if e == elem {
+			return true
+		}
+	}
+
+	return false
+}
+
+// if service has a userinput with no default value AND userInput is not set in input body, return err
+func checkDefaultValueInServiceUserInput(sdefUserInputs []exchange.UserInput, cmdUserInputs []policy.Input) (bool, error) {
+	msgPrinter := i18n.GetMessagePrinter()
+	var cmdUserInputNames []string
+	var serviceInputName string
+	var serviceInput exchange.UserInput
+
+	for _, u := range cmdUserInputs {
+		cmdUserInputNames = append(cmdUserInputNames, u.Name)
+	}
+
+	for _, serviceInput = range sdefUserInputs {
+		serviceInputName = serviceInput.Name
+
+		if serviceInput.DefaultValue == "" {
+			valueDefined := sliceContains(cmdUserInputNames, serviceInputName)
+			if !valueDefined {
+				errorString := msgPrinter.Sprintf("%v needs to be set in userInput because it has no default value.", serviceInputName)
+				return false, errors.New(errorString)
+			}
+		}
+	}
+
+	return true, nil
+}
+
+func checkUserInputDefaultValueNotEmpty(org string, sdef *exchange.ServiceDefinition, patternUserInput *policy.UserInput, userInputWithEmptyDefaultValueMap map[string][]exchange.UserInput) map[string][]exchange.UserInput {
+	if sdef != nil {
+		for _, u := range sdef.UserInputs {
+			contains := false
+			if u.DefaultValue == "" {
+				if patternUserInput != nil {
+					for _, patternInput := range patternUserInput.Inputs {
+						if patternInput.Name == u.Name {
+							contains = true
+							break
+						}
+					}
+				}
+				if !contains {
+					mapKey := fmt.Sprintf("%v/%v", org, sdef.URL)
+					emptyDefaultValueNames, exist := userInputWithEmptyDefaultValueMap[mapKey]
+					if exist {
+						emptyDefaultValueNames = append(emptyDefaultValueNames, u)
+					}
+
+					userInputWithEmptyDefaultValueMap[mapKey] = emptyDefaultValueNames
+				}
+			}
+		}
+	}
+
+	return userInputWithEmptyDefaultValueMap
+}
+
+func cmdInputsContains(cmdInputs []policy.Input, serviceInputName string) (bool, error) {
+	msgPrinter := i18n.GetMessagePrinter()
+	for _, input := range cmdInputs {
+		if input.Name == serviceInputName {
+			return true, nil
+		}
+	}
+
+	errorString := msgPrinter.Sprintf("%v needs to be set in userInput because it has no default value.", serviceInputName)
+	return false, errors.New(errorString)
+}
+
+func getUserInputWithEmptyDefaultValue(getServiceHandler exchange.ServiceHandler, topLevelServices []ServiceReference, patternUserInputsMap map[string]policy.UserInput, userInputWithEmptyDefaultValueMap map[string][]exchange.UserInput) (*map[string][]exchange.UserInput, error) {
+	msgPrinter := i18n.GetMessagePrinter()
+	if &topLevelServices != nil && len(topLevelServices) != 0 {
+		for _, topLevelService := range topLevelServices {
+			topLevelServiceVersionNumber := topLevelService.ServiceVersions[0].Version
+			servDefmap, tlService, tlServiceId, err := exchange.ServiceDefResolver(topLevelService.ServiceURL, topLevelService.ServiceOrg, topLevelServiceVersionNumber, topLevelService.ServiceArch, getServiceHandler)
+			if tlService == nil || err != nil {
+				return nil, errors.New(msgPrinter.Sprintf("toplevel service does not exist %v, %v, %v, %v", topLevelService.ServiceOrg, topLevelService.ServiceURL, topLevelService.ServiceArch, topLevelServiceVersionNumber))
+			}
+			// add toplevel service back to servDefmap
+			servDefmap[tlServiceId] = *tlService
+			//fmt.Printf("****************** tlServiceId is: %s ***********************\n", tlServiceId)
+
+			for serviceId, serviceDef := range servDefmap {
+				serviceInfos := strings.Split(serviceId, "/")
+				if len(serviceInfos) == 0 {
+					return nil, errors.New(msgPrinter.Sprintf("Failed to get service informaton for %s", serviceId))
+				}
+
+				serviceOrg := serviceInfos[0]
+				pattenUserInputMapKey := fmt.Sprintf("%v/%v", serviceOrg, serviceDef.URL)
+				patternUserInput, ok := patternUserInputsMap[pattenUserInputMapKey]
+
+				if !ok {
+					checkUserInputDefaultValueNotEmpty(serviceOrg, &serviceDef, nil, userInputWithEmptyDefaultValueMap)
+				} else {
+					checkUserInputDefaultValueNotEmpty(serviceOrg, &serviceDef, &patternUserInput, userInputWithEmptyDefaultValueMap)
+				}
+			}
+
+		}
+
+	}
+
+	return &userInputWithEmptyDefaultValueMap, nil
+
 }
