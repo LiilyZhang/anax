@@ -1019,10 +1019,12 @@ func cmdInputsContains(cmdInputs []policy.Input, serviceInputName string) (bool,
 
 func getUserInputWithEmptyDefaultValue(serviceHandler exchange.ServiceHandler, topLevelServices []ServiceReference, patternUserInputsMap map[string]policy.UserInput, userInputWithEmptyDefaultValueMap map[string][]exchange.UserInput) (*map[string][]exchange.UserInput, error) {
 	msgPrinter := i18n.GetMessagePrinter()
+	msgPrinter.Sprintf("inside getUserInputWithEmptyDefaultValue \n")
 	if &topLevelServices != nil && len(topLevelServices) != 0 {
 		for _, topLevelService := range topLevelServices {
 			topLevelServiceVersionNumber := topLevelService.ServiceVersions[0].Version
 			//servDefmap, tlService, tlServiceId, err := exchange.ServiceDefResolver(topLevelService.ServiceURL, topLevelService.ServiceOrg, topLevelServiceVersionNumber, topLevelService.ServiceArch, getServiceHandler)
+			msgPrinter.Sprintf("inside getUserInputWithEmptyDefaultValue, calling serviceHandler \n")
 			sdef, _, err := serviceHandler(topLevelService.ServiceURL, topLevelService.ServiceOrg, topLevelServiceVersionNumber, topLevelService.ServiceArch)
 			if sdef == nil || err != nil {
 				return nil, errors.New(msgPrinter.Sprintf("toplevel service does not exist %v, %v, %v, %v", topLevelService.ServiceOrg, topLevelService.ServiceURL, topLevelService.ServiceArch, topLevelServiceVersionNumber))

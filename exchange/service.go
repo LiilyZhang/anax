@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/config"
 	"github.com/open-horizon/anax/cutil"
 	"github.com/open-horizon/anax/policy"
 	"github.com/open-horizon/anax/semanticversion"
-	"strings"
-	"time"
 )
 
 // service types, they are node defined in the exchange.
@@ -312,6 +313,7 @@ func getSearchVersion(version string) (string, error) {
 func GetService(ec ExchangeContext, mURL string, mOrg string, mVersion string, mArch string) (*ServiceDefinition, string, error) {
 
 	glog.V(3).Infof(rpclogString(fmt.Sprintf("getting service definition %v %v %v %v", mURL, mOrg, mVersion, mArch)))
+	fmt.Sprintf("service.go: getting service definition %v %v %v %v \n", mURL, mOrg, mVersion, mArch)
 
 	var resp interface{}
 	resp = new(GetServicesResponse)
@@ -327,6 +329,7 @@ func GetService(ec ExchangeContext, mURL string, mOrg string, mVersion string, m
 	if searchVersion != "" {
 		targetURL = fmt.Sprintf("%vorgs/%v/services?url=%v&version=%v&arch=%v", ec.GetExchangeURL(), mOrg, mURL, searchVersion, mArch)
 	}
+	fmt.Sprintf("service.go: targetURL: %v \n", targetURL)
 
 	retryCount := ec.GetHTTPFactory().RetryCount
 	retryInterval := ec.GetHTTPFactory().GetRetryInterval()
