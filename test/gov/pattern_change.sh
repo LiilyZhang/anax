@@ -257,6 +257,26 @@ cat <<EOF > /tmp/userinput_for_sall.json
           "value": "e2edev"
         }
       ]
+    },
+    {
+      "serviceOrgid": "e2edev@somecomp.com",
+      "serviceUrl":"k8s-service1",
+      "serviceArch": "amd64",
+      "serviceVersionRange": "[0.0.0,INFINITY)",
+      "inputs": [
+        {
+          "name": "var1",
+          "value": "k8s String2"
+        },
+        {
+          "name": "var2",
+          "value": 8
+        },
+        {
+          "name": "var3",
+          "value": 99.9
+        }
+      ]
     }
   ]
 }
