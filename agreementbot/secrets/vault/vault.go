@@ -20,9 +20,10 @@ func init() {
 
 // The fields in this object are initialized in the Initialize method in this package.
 type AgbotVaultSecrets struct {
-	token      string       // The identity of this agbot in the vault
-	httpClient *http.Client // A cached http client to use for invoking the vault
-	cfg        *config.HorizonConfig
+	token                 string       // The identity of this agbot in the vault
+	httpClient            *http.Client // A cached http client to use for invoking the vault
+	cfg                   *config.HorizonConfig
+	lastVaultInteraction  uint64
 }
 
 func (vs *AgbotVaultSecrets) String() string {
@@ -126,9 +127,30 @@ func (vs *AgbotVaultSecrets) ListOrgSecrets(user, password, org string) ([]strin
 		return nil, secrets.ErrorResponse{Msg: fmt.Sprintf("Unable to parse response %v", string(respBytes)), Details: "", RespCode: http.StatusInternalServerError}
 	}
 
+	// filter out user/ and empty secret directories
+	secrets := []string{}
+	for _, secret := range respMsg.Data.Keys {
+		if secret == "user/" {
+			// filter out the user/ directory for user level secrets
+			continue
+		} else if secret[len(secret)-1] == '/' {
+			// filter out empty directories
+			res, listErr := vs.ListOrgSecrets(user, password, org+"/"+(secret[:len(secret)-1]))
+			if listErr != nil && len(res) == 0 {
+				continue
+			} else {
+				// non-empty secret directory
+				secrets = append(secrets, secret)
+			}
+		} else {
+			// secret
+			secrets = append(secrets, secret)
+		}
+	}
+
 	glog.V(3).Infof(vaultPluginLogString("done listing secrets."))
 
-	return respMsg.Data.Keys, nil
+	return secrets, nil
 }
 
 // Available to all users within the org
@@ -201,6 +223,15 @@ func (vs *AgbotVaultSecrets) deleteSecret(user, password, org, name, url string)
 		return secrets.ErrorResponse{Msg: fmt.Sprintf("Unable to login user %s, error %v", user, err), Details: "", RespCode: http.StatusUnauthorized}
 	}
 
+	// check if the secret exists before deleting (if the secret doesn't exist, return 404)
+	exists, listErr := vs.listSecret(user, password, org, name, url)
+	if listErr != nil {
+		return listErr
+	}
+	if exists["exists"] == "false" {
+		return secrets.ErrorResponse{Msg: fmt.Sprintf("Secret does not exist; there is nothing to delete."), Details: "", RespCode: http.StatusNotFound}
+	}
+
 	glog.V(3).Infof(vaultPluginLogString(fmt.Sprintf("deleting secret %s in org %s as user %s", name, org, user)))
 	resp, err := vs.invokeVaultWithRetry(userVaultToken, url, http.MethodDelete, nil)
 	if resp != nil && resp.Body != nil {
@@ -270,11 +301,17 @@ func (vs *AgbotVaultSecrets) GetSecretDetails(org, secretUser, secretName string
 		return
 	}
 
-	if uerr := json.Unmarshal(respBytes, &res); uerr != nil {
+	out := ListSecretResponse{}
+	if uerr := json.Unmarshal(respBytes, &out); uerr != nil {
 		err = secrets.ErrorResponse{Msg: fmt.Sprintf("Unable to parse response body %v", uerr), Details: "", RespCode: http.StatusInternalServerError}
 		return
 	}
 
+	// Convert the details to the output structure in the plugin interface.
+	for k, v := range out.Data {
+		res.Key = k
+		res.Value = v
+	}
 	glog.V(3).Infof(vaultPluginLogString("done extracting secret details"))
 
 	return

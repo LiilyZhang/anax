@@ -486,7 +486,7 @@ echo -e "\n${PREFIX} test ${LIST_ORG_SECRET} GET"
 CMD="curl -sLX GET -w %{http_code} ${CERT_VAR} -u ${USERDEV_ADMIN_AUTH} ${AGBOT_SAPI_URL}/${LIST_ORG_SECRET}"
 echo "$CMD"
 RES=$($CMD)
-results "$RES" "200" "exists" "true"
+results "$RES" "200" "exists" "false"
 
 echo -e "\n${PREFIX} test ${LIST_ORG_SECRETS} GET"
 CMD="curl -sLX GET -w %{http_code} ${CERT_VAR} -u ${USERDEV_ADMIN_AUTH} ${AGBOT_SAPI_URL}/${LIST_ORG_SECRETS}"
@@ -541,5 +541,12 @@ CMD="curl -sLX GET -w %{http_code} ${CERT_VAR} -u ${USERDEV_ADMIN_AUTH} ${AGBOT_
 echo "$CMD"
 RES=$($CMD)
 results "$RES" "200" "exists" "false"
+
+# Check agbot <-> vault health status using AGBOT_API
+echo -e "\n${PREFIX} Check agbot-vault health status"
+CMD="curl -sLX GET -w %{http_code} ${AGBOT_API}/health"
+echo "$CMD"
+RES=$($CMD)
+results "$RES" "200" "lastVaultInteraction"
 
 echo -e "\n${PREFIX} complete test\n"
