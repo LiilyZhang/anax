@@ -538,6 +538,8 @@ type MicroserviceInstance struct {
 	CurrentRetryCount    uint                           `json:"current_retry_count"`
 	RetryStartTime       uint64                         `json:"retry_start_time"`
 	EnvVars              map[string]string              `json:"env_vars"`
+	SecretsStatus        map[string]*SecretStatus       `json:"secrets_status"`
+	ESSToken             string                         `json:"ess_token"`
 }
 
 func (w MicroserviceInstance) String() string {
@@ -560,11 +562,13 @@ func (w MicroserviceInstance) String() string {
 		"MaxRetryDuration: %v, "+
 		"CurrentRetryCount: %v, "+
 		"RetryStartTime: %v, "+
-		"EnvVars: %v",
+		"EnvVars: %v, "+
+		"SecretsStatus: %v"+
+		"ESSToken: %v",
 		w.SpecRef, w.Org, w.Version, w.Arch, w.InstanceId, w.Archived, w.InstanceCreationTime,
 		w.ExecutionStartTime, w.ExecutionFailureCode, w.ExecutionFailureDesc,
 		w.CleanupStartTime, w.AssociatedAgreements, w.MicroserviceDefId, w.ParentPath, w.AgreementLess,
-		w.MaxRetries, w.MaxRetryDuration, w.CurrentRetryCount, w.RetryStartTime, w.EnvVars)
+		w.MaxRetries, w.MaxRetryDuration, w.CurrentRetryCount, w.RetryStartTime, w.EnvVars, w.SecretsStatus, w.ESSToken)
 }
 
 // create a unique name for a microservice def
@@ -660,6 +664,8 @@ func NewMicroserviceInstance(db *bolt.DB, ref_url string, org string, version st
 		MaxRetryDuration:     0,
 		CurrentRetryCount:    1, // the original execution is counted as the first one.
 		RetryStartTime:       0,
+		SecretsStatus:        make(map[string]*SecretStatus),
+		ESSToken:             "",
 	}
 
 	return saveMicroserviceInstance(db, new_inst)
@@ -732,13 +738,13 @@ func FindMicroserviceInstanceWithKey(db *bolt.DB, key string) (*MicroserviceInst
 
 		if b := tx.Bucket([]byte(MICROSERVICE_INSTANCES)); b != nil {
 			v := b.Get([]byte(key))
-
 			var ms MicroserviceInstance
 
 			if err := json.Unmarshal(v, &ms); err != nil {
-				glog.Errorf("Unable to deserialize service instance db record: %v. Error: %v", v, err)
+				glog.Errorf("Lily - FindMicroserviceInstanceWithKey: Unable to deserialize service instance db record: %v. Error: %v", v, err)
 				return err
 			} else {
+				glog.Errorf("Lily - FindMicroserviceInstanceWithKey: find msInst with given key: %v", ms.String())
 				pms = &ms
 				return nil
 			}
@@ -754,7 +760,6 @@ func FindMicroserviceInstanceWithKey(db *bolt.DB, key string) (*MicroserviceInst
 	}
 }
 
-// filter on MicroserviceInstance
 type MIFilter func(MicroserviceInstance) bool
 
 // filter for all microservice instances
@@ -1031,6 +1036,8 @@ func persistUpdatedMicroserviceInstance(db *bolt.DB, key string, update *Microse
 				mod.MaxRetryDuration = update.MaxRetryDuration
 				mod.CurrentRetryCount = update.CurrentRetryCount
 				mod.EnvVars = update.EnvVars
+				mod.ESSToken = update.ESSToken
+				mod.SecretsStatus = update.SecretsStatus
 
 				if len(mod.ParentPath) != len(update.ParentPath) {
 					mod.ParentPath = update.ParentPath
@@ -1098,6 +1105,204 @@ func DeleteMicroserviceInstance(db *bolt.DB, key string) (*MicroserviceInstance,
 		}
 	}
 }
+
+type SecretStatus struct {
+	SecretName string `json:"secret_name"`
+	UpdateTime uint64 `json:"update_time"`
+	Received   bool   `json:"received"`
+}
+
+func NewSecretStatus(secretName string, updateTime uint64, received bool) *SecretStatus {
+	return &SecretStatus{
+		SecretName: secretName,
+		UpdateTime: updateTime,
+		Received:   received,
+	}
+}
+
+// secretsStatus related
+// find the microservice instance from the db
+/*
+func FindMicroserviceInstanceWithESSToken(db *bolt.DB, ess_token string) (*MicroserviceInstance, error) {
+	glog.Infof("Lily- FindMicroserviceInstanceWithESSToken: %v", ess_token)
+	var pms *MicroserviceInstance
+	pms = nil
+
+	// fetch microservice instances
+	readErr := db.View(func(tx *bolt.Tx) error {
+
+		if b := tx.Bucket([]byte(MICROSERVICE_INSTANCES)); b != nil {
+			b.ForEach(func(k, v []byte) error {
+
+				var ms MicroserviceInstance
+
+				if err := json.Unmarshal(v, &ms); err != nil {
+					//glog.Errorf("Unable to deserialize service instance db record: %v", v)
+					glog.Errorf("Lily - FindMicroserviceInstanceWithESSToken: Unable to deserialize service instance db record: %v, error: %v", v, err)
+					return err
+				} else if ms.ESSToken == ess_token {
+					pms = &ms
+				}
+				return nil
+			})
+		}
+
+		return nil // end the transaction
+	})
+
+	if readErr != nil {
+		return nil, readErr
+	} else {
+		return pms, nil
+	}
+} */
+
+func FindMicroserviceInstanceWithESSToken(db *bolt.DB, ess_token string) (*MicroserviceInstance, error) {
+	glog.Infof("Lily- FindMicroserviceInstanceWithESSToken: %v", ess_token)
+	var pms *MicroserviceInstance
+	pms = nil
+
+	// fetch microservice instances
+	readErr := db.View(func(tx *bolt.Tx) error {
+
+		if b := tx.Bucket([]byte(MICROSERVICE_INSTANCES)); b != nil {
+			cursor := b.Cursor()
+			for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+				var msInstance MicroserviceInstance
+				if err := json.Unmarshal(value, &msInstance); err != nil {
+					return err
+				}
+
+				if msInstance.ESSToken == ess_token {
+					pms = &msInstance
+					return nil
+				}
+			}
+		}
+
+		return nil // end the transaction
+	})
+
+	if readErr != nil {
+		return nil, readErr
+	} else {
+		return pms, nil
+	}
+}
+
+
+func FindUpdatedSecretsForMSInstance(db *bolt.DB, key string) ([]string, error) {
+	updatedSecretNames := make([]string, 0)
+	if msInst, err := FindMicroserviceInstanceWithKey(db, key); err != nil {
+		return updatedSecretNames, err
+	} else {
+		msDefId := msInst.MicroserviceDefId
+		// get secretsStatus map for this instance
+		secretsStatus := msInst.SecretsStatus
+		// Find secrets for given msDefId in "Secret" bucket
+		secrets, err := FindAllSecretsForMS(db, msDefId) // list of secrets retrieved from "Secret" bucket
+		if err != nil {
+			return updatedSecretNames, err
+		} else if len(secrets.SecretsMap) == 0 {
+			return updatedSecretNames, nil
+		}
+
+		// Go through the "Secret" bucket secrets
+		for secName, secret := range secrets.SecretsMap {
+			// 1. If secret TimeLastUpdated == TimeCreated, no update
+			// 2. If MSInstance secretStatus has no record, and update time > create time, has been updated
+			// 3. If MSInstance secretStatus doesn't have this secret, and update time > create time, has been update
+			// 4. If MSInstance secretStatus for secretName is received, it is "updated" only when secret update time > update time stored for given MSInstance
+			// 5. If MSInstance secretStatus for secretName is not received, it is "updated" only when secret update time >= update time stored for given MSInstance
+
+			if secret.TimeLastUpdated == 0 || secret.TimeLastUpdated == secret.TimeCreated {
+				// the secret is not updated since created
+				continue
+			} else if secret.TimeLastUpdated > secret.TimeCreated {
+				if len(secretsStatus) == 0 {
+					updatedSecretNames = append(updatedSecretNames, secName)
+				} else if secStat, ok := secretsStatus[secName]; !ok {
+					updatedSecretNames = append(updatedSecretNames, secName)
+				} else if !secStat.Received && secret.TimeLastUpdated >= secStat.UpdateTime {
+					updatedSecretNames = append(updatedSecretNames, secName)
+				} else if secStat.Received && secret.TimeLastUpdated > secStat.UpdateTime {
+					updatedSecretNames = append(updatedSecretNames, secName)
+				}
+			}
+		}
+	}
+	return updatedSecretNames, nil
+}
+
+func FindMSInstanceSecretStatus(db *bolt.DB, key string, secret_name string) (*SecretStatus, error) {
+	secStatus := &SecretStatus{}
+	msinst, err := FindMicroserviceInstanceWithKey(db, key)
+	if err != nil {
+		return secStatus, err
+	}
+
+	return msinst.SecretsStatus[secret_name], nil
+	// if secStatus, ok := msinst.SecretsStatus[secret_name]; !ok {
+	// 	return secStatus, nil
+	// } else {
+	// 	return secStatus, nil
+	// }
+}
+
+func SaveMSInstanceSecretStatus(db *bolt.DB, key string, secret_status *SecretStatus) (*MicroserviceInstance, error) {
+	return microserviceInstanceStateUpdate(db, key, func(c MicroserviceInstance) *MicroserviceInstance {
+		//c.CurrentRetryCount = current_retry
+		c.SecretsStatus[secret_status.SecretName] = secret_status
+		// if _, ok := c.SecretsStatus[secret_status.SecretName]; !ok {
+		// 	// if not exist, save itß
+		// 	SecretsStatus[secretName]
+		// }
+		return &c
+	})
+}
+
+func UpdateMSInstanceESSToken(db *bolt.DB, key string, ess_token string) (*MicroserviceInstance, error) {
+	return microserviceInstanceStateUpdate(db, key, func(c MicroserviceInstance) *MicroserviceInstance {
+		c.ESSToken = ess_token
+		return &c
+	})
+}
+
+func UpdateMSInstanceSecretStatusReceived(db *bolt.DB, key string, secret_name string) (*MicroserviceInstance, error) {
+	return microserviceInstanceStateUpdate(db, key, func(c MicroserviceInstance) *MicroserviceInstance {
+		secretStatusMap := c.SecretsStatus
+		var secretStatus *SecretStatus
+		var ok bool
+		if secretStatus, ok = secretStatusMap[secret_name]; ok {
+			updatedSecStatus := NewSecretStatus(secretStatus.SecretName, secretStatus.UpdateTime, true)
+			secretStatusMap[secret_name] = updatedSecStatus
+		}
+		c.SecretsStatus = secretStatusMap
+		return &c
+	})
+}
+
+/*
+func UpdateMSInstanceSecretStatusReceived(db *bolt.DB, key string, secret_name string) (*MicroserviceInstance, error) {
+	if ms, err := FindMicroserviceInstanceWithKey(db, key); err != nil {
+		return nil, err
+	} else if ms == nil {
+		return nil, fmt.Errorf("No record with key: %v", key)
+	} else {
+		secretStatusMap := ms.SecretsStatus
+		if secretStatus, ok := secretStatusMap[secret_name]; !ok {
+			return nil, fmt.Errorf("No secretName for marking received: %v for key %v", secret_name, key)
+		} else {
+			secretStatus.Received = true
+		}
+		// Do I need this line??
+		// Should use map[string]*SecretStatus or *map[string]*SecretStatus as SecretsStatus
+		ms.SecretsStatus = secretStatusMap
+
+		return ms, nil
+	}
+}*/
+
 
 // Service dependencies can be described by a directed graph, starting from the agreement service as the root node of
 // the graph all the way to the services which are leaf nodes because they have no dependencies. Services can be

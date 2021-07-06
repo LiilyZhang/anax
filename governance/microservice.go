@@ -207,6 +207,7 @@ func (w *GovernanceWorker) StartMicroservice(ms_key string, agreementId string, 
 				agIds = ms_instance.AssociatedAgreements
 			}
 
+			glog.V(5).Infof(logString(fmt.Sprintf("Lily - create new containerLaunchContext for msinstanceId %v", ms_instance.InstanceId)))
 			lc := events.NewContainerLaunchContext(cc, &envAdds, events.BlockchainConfig{}, ms_instance.GetKey(), agIds, ms_specs, dependencyPath, isRetry)
 			w.Messages() <- events.NewLoadContainerMessage(events.LOAD_CONTAINER, lc)
 

@@ -37,10 +37,10 @@ func (a *AuthenticationManager) GetCredentialPath(key string) string {
 
 // Create a new container authentication credential and write it into the Agent's host file system. The credential file
 // live in a directory named by the key input parameter.
-func (a *AuthenticationManager) CreateCredential(key string, id string, ver string, secureCreds bool) error {
+func (a *AuthenticationManager) CreateCredential(key string, id string, ver string, secureCreds bool) (*AuthenticationCredential, error) {
 	cred, err := GenerateNewCredential(id, ver)
 	if err != nil {
-		return errors.New("unable to generate new authentication token")
+		return nil, errors.New("unable to generate new authentication token")
 	}
 
 	fileName := path.Join(a.GetCredentialPath(key), config.HZN_FSS_AUTH_FILE)
@@ -60,11 +60,11 @@ func (a *AuthenticationManager) CreateCredential(key string, id string, ver stri
 	if secureCreds {
 		currUser, err := user.Current()
 		if err != nil {
-			return errors.New("unable to get current OS user")
+			return nil, errors.New("unable to get current OS user")
 		}
 		currUserUidInt, err = strconv.Atoi(currUser.Uid)
 		if err != nil {
-			return errors.New("unable to convert current user uid from string to int")
+			return nil, errors.New("unable to convert current user uid from string to int")
 		}
 
 		groupName = cutil.GetHashFromString(key)
@@ -73,19 +73,19 @@ func (a *AuthenticationManager) CreateCredential(key string, id string, ver stri
 		var cmdErr bytes.Buffer
 		groupAddCmd.Stderr = &cmdErr
 		if err := groupAddCmd.Run(); err != nil {
-			return errors.New(fmt.Sprintf("failed to create group %v for key(agreementId) %v, error: %v, stderr: %v", groupName, key, err, cmdErr.String()))
+			return nil, errors.New(fmt.Sprintf("failed to create group %v for key(agreementId) %v, error: %v, stderr: %v", groupName, key, err, cmdErr.String()))
 		}
 
 		// Verifying group is created
 		group, err = user.LookupGroup(groupName)
 		if err != nil {
-			return errors.New(fmt.Sprintf("unable to find group %v created for auth file %v", groupName, fileName))
+			return nil, errors.New(fmt.Sprintf("unable to find group %v created for auth file %v", groupName, fileName))
 		}
 
 		// get group id
 		groupIdInt, err = strconv.Atoi(group.Gid)
 		if err != nil {
-			return errors.New(fmt.Sprintf("failed to get group id %v as string, error: %v", group.Gid, err))
+			return nil, errors.New(fmt.Sprintf("failed to get group id %v as string, error: %v", group.Gid, err))
 		}
 
 		fileMode = 0750
@@ -95,27 +95,27 @@ func (a *AuthenticationManager) CreateCredential(key string, id string, ver stri
 	}
 
 	if credBytes, err := json.Marshal(cred); err != nil {
-		return errors.New(fmt.Sprintf("unable to marshal new authentication credential, error: %v", err))
+		return nil, errors.New(fmt.Sprintf("unable to marshal new authentication credential, error: %v", err))
 	} else if err := os.MkdirAll(a.GetCredentialPath(key), fileMode); err != nil {
-		return errors.New(fmt.Sprintf("unable to create directory path %v for authentication credential, error: %v", a.GetCredentialPath(key), err))
+		return nil, errors.New(fmt.Sprintf("unable to create directory path %v for authentication credential, error: %v", a.GetCredentialPath(key), err))
 	} else if err := ioutil.WriteFile(fileName, credBytes, fileMode); err != nil {
-		return errors.New(fmt.Sprintf("unable to write authentication credential file %v, error: %v", fileName, err))
+		return nil, errors.New(fmt.Sprintf("unable to write authentication credential file %v, error: %v", fileName, err))
 	}
 
 	if secureCreds {
 		// change group owner of auth foler and file, and set the group in groupAdd for service docker container in container.go
 		if err = os.Chown(a.GetCredentialPath(key), currUserUidInt, groupIdInt); err != nil {
-			return errors.New(fmt.Sprintf("unable to change group to (group id: %v, group name:%v) for the authentication credential folder %v, error: %v", group.Gid, groupName, a.GetCredentialPath(key), err))
+			return nil, errors.New(fmt.Sprintf("unable to change group to (group id: %v, group name:%v) for the authentication credential folder %v, error: %v", group.Gid, groupName, a.GetCredentialPath(key), err))
 		}
 
 		if err = os.Chown(fileName, currUserUidInt, groupIdInt); err != nil {
-			return errors.New(fmt.Sprintf("unable to change group to (group id: %v, group name:%v) for the authentication credential file %v, error: %v", group.Gid, groupName, fileName, err))
+			return nil, errors.New(fmt.Sprintf("unable to change group to (group id: %v, group name:%v) for the authentication credential file %v, error: %v", group.Gid, groupName, fileName, err))
 		}
 	}
 
 	glog.V(5).Infof(authLogString(fmt.Sprintf("Created credential for service %v, assigned id %v.", key, id)))
 
-	return nil
+	return cred, nil
 }
 
 // Verify that the input credentials are in the auth manager.

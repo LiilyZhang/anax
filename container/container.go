@@ -1191,7 +1191,7 @@ func (b *ContainerWorker) workloadStorageDir(agreementId string) (string, bool) 
 }
 
 // This function creates the containers, volumes, networks for the given agreement or service.
-func (b *ContainerWorker) ResourcesCreate(agreementId string, agreementProtocol string, deployment *containermessage.DeploymentDescription, configureRaw []byte, environmentAdditions map[string]string, ms_networks map[string]string, serviceURL string, sVer string) (persistence.DeploymentConfig, error) {
+func (b *ContainerWorker) ResourcesCreate(agreementId string, agreementProtocol string, deployment *containermessage.DeploymentDescription, configureRaw []byte, environmentAdditions map[string]string, ms_networks map[string]string, serviceURL string, sVer string, ms_instanceKey string) (persistence.DeploymentConfig, error) {
 
 	// local helpers
 	fail := func(container *docker.Container, name string, err error) error {
@@ -1270,8 +1270,24 @@ func (b *ContainerWorker) ResourcesCreate(agreementId string, agreementProtocol 
 	if b.pattern == "" {
 		serviceVersion = sVer
 	}
-	if err := b.GetAuthenticationManager().CreateCredential(agreementId, serviceURL, serviceVersion, !b.isDevInstance); err != nil {
-		glog.Errorf("Failed to create MMS Authentication credential file for %v, error %v", agreementId, err)
+	cred, err := b.GetAuthenticationManager().CreateCredential(agreementId, serviceURL, serviceVersion, !b.isDevInstance)
+	if err != nil {
+		return nil, err
+	}
+
+	glog.V(5).Infof("Lily - ResourcesCreates() for service %s, serviceVersion %s, isHznDev: %t, ms_instanceKey: %s", serviceURL, sVer, b.isDevInstance, ms_instanceKey)
+	if !b.isDevInstance {
+		if msInst, err := persistence.FindMicroserviceInstanceWithKey(b.db, ms_instanceKey); err == nil && msInst != nil {
+			// update MicroserviceInstance
+			glog.V(5).Infof("Lily - Find for msInstance for service %s, serviceVersion %s, ms_instanceKey: %s. Token is: %s", serviceURL, sVer, ms_instanceKey, cred.Token)
+			token := cred.Token
+			msInst, err := persistence.UpdateMSInstanceESSToken(b.db, ms_instanceKey, token)
+			if err != nil {
+				glog.Errorf("Failed to update ess token for microservice instance %s, error %v", ms_instanceKey, err)
+				return nil, err
+			}
+			glog.V(5).Infof("Lily - agreementId: %v, microserviceInstance after updated: %v", agreementId, msInst.String())
+		}
 	}
 
 	servicePairs, err := b.finalizeDeployment(agreementId, deployment, environmentAdditions, workloadRWStorageDir, b.Config.Edge.DefaultCPUSet, b.Config.GetFileSyncServiceAPIUnixDomainSocketPath())
@@ -1546,7 +1562,8 @@ func (b *ContainerWorker) CommandHandler(command worker.Command) bool {
 			sVer := ags[0].RunningWorkload.Version
 
 			// Create the docker configuration and launch the containers.
-			if deploymentConfig, err := b.ResourcesCreate(agreementId, cmd.AgreementLaunchContext.AgreementProtocol, deploymentDesc, cmd.AgreementLaunchContext.ConfigureRaw, *cmd.AgreementLaunchContext.EnvironmentAdditions, ms_children_networks, serviceIdentity, sVer); err != nil {
+			glog.V(5).Infof("Lily - WorkloadConfigureCommand, msInstanceDBKey is %s", cmd.AgreementLaunchContext.MicroserviceInstanceDBKey)
+			if deploymentConfig, err := b.ResourcesCreate(agreementId, cmd.AgreementLaunchContext.AgreementProtocol, deploymentDesc, cmd.AgreementLaunchContext.ConfigureRaw, *cmd.AgreementLaunchContext.EnvironmentAdditions, ms_children_networks, serviceIdentity, sVer, cmd.AgreementLaunchContext.MicroserviceInstanceDBKey); err != nil {
 				eventlog.LogAgreementEvent(b.db, persistence.SEVERITY_ERROR,
 					persistence.NewMessageMeta(EL_CONT_START_CONTAINER_ERROR, err.Error()),
 					persistence.EC_ERROR_START_CONTAINER,
@@ -1700,7 +1717,8 @@ func (b *ContainerWorker) CommandHandler(command worker.Command) bool {
 		sVer := serviceInfo.Version
 
 		// Get the container started
-		if deployment, err := b.ResourcesCreate(lc.Name, "", deploymentDesc, []byte(""), *lc.EnvironmentAdditions, ms_children_networks, serviceIdentity, sVer); err != nil {
+		glog.V(5).Infof("Lily - ContainerConfigureCommand, msInstanceDBKey is %s", lc.Name)
+		if deployment, err := b.ResourcesCreate(lc.Name, "", deploymentDesc, []byte(""), *lc.EnvironmentAdditions, ms_children_networks, serviceIdentity, sVer, lc.Name); err != nil {
 			log_str := EL_CONT_START_CONTAINER_ERROR_FOR_AG
 			if lc.IsRetry {
 				log_str = EL_CONT_RESTART_CONTAINER_ERROR_FOR_AG

@@ -150,14 +150,15 @@ type AgreementLaunchContext struct {
 	ConfigureRaw         []byte
 	EnvironmentAdditions *map[string]string // provided by platform, not but user
 	Microservices        []MicroserviceSpec // for ms split.
+	MicroserviceInstanceDBKey string
 }
 
 func (c AgreementLaunchContext) String() string {
-	return fmt.Sprintf("AgreementProtocol: %v, AgreementId: %v, Configure: %v, EnvironmentAdditions: %v, Microservices: %v", c.AgreementProtocol, c.AgreementId, c.Configure, c.EnvironmentAdditions, c.Microservices)
+	return fmt.Sprintf("AgreementProtocol: %v, AgreementId: %v, Configure: %v, EnvironmentAdditions: %v, Microservices: %v, MicroserviceInstanceDBKey: %v", c.AgreementProtocol, c.AgreementId, c.Configure, c.EnvironmentAdditions, c.Microservices, c.MicroserviceInstanceDBKey)
 }
 
 func (c AgreementLaunchContext) ShortString() string {
-	return fmt.Sprintf("AgreementProtocol: %v, AgreementId: %v, Configure: %v", c.AgreementProtocol, c.AgreementId, c.Configure.ShortString())
+	return fmt.Sprintf("AgreementProtocol: %v, AgreementId: %v, Configure: %v, MicroserviceInstanceDBKey: %v", c.AgreementProtocol, c.AgreementId, c.Configure.ShortString(), c.MicroserviceInstanceDBKey)
 }
 
 func (c AgreementLaunchContext) ContainerConfig() ContainerConfig {
