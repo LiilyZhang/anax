@@ -2166,13 +2166,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "名稱或組織為空字串。",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "serviceVersions 陣列為空。",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {

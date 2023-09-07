@@ -1822,13 +1822,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "Name ou Org é uma sequência de caracteres vazia.",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "A matriz serviceVersions está vazia.",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {
@@ -2152,7 +2152,7 @@
     {
       "id": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
       "message": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
-      "translation": "O nome de um grupo de alta disponibilidade. Mutuamente exclusivo com -n, --node-pol e --node-ui.",
+      "translation": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
       "fuzzy": true
     },
     {
@@ -2224,7 +2224,7 @@
     {
       "id": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
       "message": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
-      "translation": "O nome de um grupo de alta disponibilidade. Mutuamente exclusivo com -n e --node-pol.",
+      "translation": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
       "fuzzy": true
     },
     {
@@ -5020,7 +5020,7 @@
     {
       "id": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
       "message": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
-      "translation": "Remover também todas as informações de registro anteriores. Utilizar somente em caso de falha do comando 'hzn unregister'. Antes de usar essa sinalização, capture os logs, executando o comando 'hzn eventlog list -a -l'.",
+      "translation": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
       "fuzzy": true
     },
     {
@@ -5176,7 +5176,7 @@
     {
       "id": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
       "message": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
-      "translation": "Listar e gerenciar segredos no gerenciador de segredos. NOTA: deve-se autenticar como um administrador para listar segredos disponíveis para toda a organização.",
+      "translation": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
       "fuzzy": true
     },
     {
@@ -16392,7 +16392,7 @@
     {
       "id": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
       "message": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
-      "translation": "O atributo padrão a ser atualizado não está localizado no arquivo de entrada. Os atributos suportados são: rótulo, descrição, serviços, userInput e secretBinding.",
+      "translation": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
       "fuzzy": true
     },
     {
@@ -20586,7 +20586,7 @@
     {
       "id": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
       "message": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
-      "translation": "O nó {Org}/{NodeId} está no grupo de alta disponibilidade {HaGroupName}.",
+      "translation": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
       "placeholders": [
         {
           "id": "Org",

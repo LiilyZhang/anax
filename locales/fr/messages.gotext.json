@@ -2166,13 +2166,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "La chaîne Name ou Org est vide.",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "Le tableau serviceVersions est vide.",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {

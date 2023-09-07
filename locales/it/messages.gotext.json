@@ -2166,13 +2166,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "Name o Org è una stringa vuota.",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "L'array serviceVersions è vuota.",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {

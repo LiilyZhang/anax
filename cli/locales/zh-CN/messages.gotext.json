@@ -1822,13 +1822,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "名称或组织是空字符串。",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "serviceVersions 数组为空。",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {
@@ -2152,7 +2152,7 @@
     {
       "id": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
       "message": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
-      "translation": "HA 组的名称。 与 -n、--node-pol 和 --node-ui 互斥。",
+      "translation": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
       "fuzzy": true
     },
     {
@@ -2224,7 +2224,7 @@
     {
       "id": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
       "message": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
-      "translation": "HA 组的名称。 与 -n 和 --node-pol 互斥。",
+      "translation": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
       "fuzzy": true
     },
     {
@@ -5020,7 +5020,7 @@
     {
       "id": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
       "message": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
-      "translation": "同时移除所有的先前注册信息。 只有在 'hzn unregister' 命令失败后，才应使用此标志。 在使用此标志之前，请通过运行 'hzn eventlog list -a -l' 命令捕获日志。",
+      "translation": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
       "fuzzy": true
     },
     {
@@ -5176,7 +5176,7 @@
     {
       "id": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
       "message": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
-      "translation": "列出和管理私钥管理器中的私钥。注：您必须认证为管理员才能列示可供整个组织使用的私钥。",
+      "translation": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
       "fuzzy": true
     },
     {
@@ -16392,7 +16392,7 @@
     {
       "id": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
       "message": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
-      "translation": "输入文件中找不到待更新的模式属性。 支持的属性包括：label、description、services、userInput 和 secretBinding。",
+      "translation": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
       "fuzzy": true
     },
     {
@@ -20586,7 +20586,7 @@
     {
       "id": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
       "message": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
-      "translation": "节点 {Org}/{NodeId} 位于 HA 组 {HaGroupName} 中。",
+      "translation": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
       "placeholders": [
         {
           "id": "Org",

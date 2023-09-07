@@ -1822,13 +1822,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "이름 또는 조직이 빈 문자열입니다.",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "serviceVersions 배열이 비어 있습니다.",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {
@@ -2152,7 +2152,7 @@
     {
       "id": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
       "message": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
-      "translation": "HA 그룹의 이름입니다. -n, --node-pol 및 --node-ui와 함께 사용할 수 없습니다.",
+      "translation": "The name of an HA group. Mutually exclusive with -n, --node-pol and --node-ui.",
       "fuzzy": true
     },
     {
@@ -2224,7 +2224,7 @@
     {
       "id": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
       "message": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
-      "translation": "HA 그룹의 이름입니다. -n 및 --node-pol은 함께 사용할 수 없습니다.",
+      "translation": "The name of an HA group. Mutually exclusive with -n and --node-pol.",
       "fuzzy": true
     },
     {
@@ -5020,7 +5020,7 @@
     {
       "id": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
       "message": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
-      "translation": "이전 등록 정보를 모두 제거합니다. 'hzn unregister' 명령이 실패한 후에만 이를 사용하십시오. 이 플래그를 사용하기 전에 'hzn eventlog list -a -l' 명령을 실행하여 로그를 캡처하십시오.",
+      "translation": "Also remove all the previous registration information. Use it only after the 'hzn unregister' command failed. Please capture the logs by running 'hzn eventlog list -a -l' command before using this flag.",
       "fuzzy": true
     },
     {
@@ -5176,7 +5176,7 @@
     {
       "id": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
       "message": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
-      "translation": "시크릿 관리자에서 시크릿을 나열 및 관리합니다. 참고: 전체 조직에서 사용 가능한 시크릿을 나열하려면 관리자로 인증해야 합니다.",
+      "translation": "List and manage secrets in the secrets manager. NOTE: You must authenticate as an administrator to list secrets available to the entire organization.",
       "fuzzy": true
     },
     {
@@ -16392,7 +16392,7 @@
     {
       "id": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
       "message": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
-      "translation": "업데이트할 패턴 속성이 입력 파일에 없습니다. 지원되는 속성: label, description, services, userInput, secretBinding.",
+      "translation": "Pattern attribute to be updated is not found in the input file. Supported attributes are: label, description, services, userInput and secretBinding.",
       "fuzzy": true
     },
     {
@@ -20586,7 +20586,7 @@
     {
       "id": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
       "message": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
-      "translation": "노드 {Org}/{NodeId}은(는) HA 그룹 {HaGroupName}에 있습니다.",
+      "translation": "Node {Org}/{NodeId} is in HA group {HaGroupName}.",
       "placeholders": [
         {
           "id": "Org",

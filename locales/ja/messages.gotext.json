@@ -2166,13 +2166,13 @@
     {
       "id": "Name, or Org is empty string.",
       "message": "Name, or Org is empty string.",
-      "translation": "Name または Org が空ストリングです。",
+      "translation": "Name, or Org is empty string.",
       "fuzzy": true
     },
     {
       "id": "The serviceVersions array is empty.",
       "message": "The serviceVersions array is empty.",
-      "translation": "serviceVersions 配列が空です。",
+      "translation": "The serviceVersions array is empty.",
       "fuzzy": true
     },
     {
