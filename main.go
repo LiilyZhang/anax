@@ -21,6 +21,7 @@ import (
 	"github.com/open-horizon/anax/exchange"
 	_ "github.com/open-horizon/anax/externalpolicy/text_language"
 	"github.com/open-horizon/anax/governance"
+	"github.com/open-horizon/anax/helm"
 	"github.com/open-horizon/anax/i18n"
 	_ "github.com/open-horizon/anax/i18n_messages"
 	"github.com/open-horizon/anax/imagefetch"
@@ -193,6 +194,7 @@ func main() {
 		workers.Add(changes.NewChangesWorker("ExchangeChanges", cfg, db))
 		workers.Add(nodemanagement.NewNodeManagementWorker("NodeManagement", cfg, db))
 		workers.Add(download.NewDownloadWorker("Download", cfg, db))
+		workers.Add(helm.NewHelmWorker("Helm", cfg, db))
 
 		// add cluster upgrade worker only when it is edge cluster
 		if cfg.Edge.DockerEndpoint == "" {

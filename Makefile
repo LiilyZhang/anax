@@ -17,7 +17,7 @@ BRANCH_NAME ?= ""
 export VERSION ?= 2.31.0
 # BUILD_NUMBER will be added to the version if set. It can be a simple number or something like a numeric timestamp or jenkins hash.
 # It can NOT contain dashes, but can contain: plus, period, and tilde.
-export BUILD_NUMBER
+export BUILD_NUMBER = 1024
 # only set DISTRO if the artifact needs to be built differently for this distro. Value can be like "ubuntu" or "ubuntu.bionic". Will be appended to BUILD_NUMBER
 export DISTRO
 

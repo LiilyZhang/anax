@@ -16,6 +16,7 @@ type ReleaseStatus struct {
 	Updated   string // The date of last change
 	Status    string // The release's status
 	ChartName string // The name of the chart
+	AppVersion string // The version of the app
 	Namespace string // The k8s namespace that the chart was deployed into
 }
 
