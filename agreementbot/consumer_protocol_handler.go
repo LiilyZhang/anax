@@ -535,12 +535,12 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 		}
 	}
 
-	if same, msg := producerPol.IsSamePolicy(oldPolicy); same {
+	if same, msg := consumerPol.IsSamePolicy(oldPolicy); same {
 		glog.V(3).Infof("business policy(producerPol) %v content remains same with old policy", ag.PolicyName)
 		return true, true, true
 	} else {
 		glog.V(3).Infof("business policy %v content changed, msg: %v", ag.PolicyName, msg)
-		glog.V(3).Infof("updated business policy %v, old policy: %v", producerPol, oldPolicy)
+		glog.V(3).Infof("updated business policy %v, old policy: %v", consumerPol, oldPolicy)
 	}
 
 	newTsCs, err := policy.Create_Terms_And_Conditions(producerPol, consumerPol, wl, ag.CurrentAgreementId, b.config.AgreementBot.DefaultWorkloadPW, b.config.AgreementBot.NoDataIntervalS, basicprotocol.PROTOCOL_CURRENT_VERSION)
