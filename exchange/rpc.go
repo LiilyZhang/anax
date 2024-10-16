@@ -41,6 +41,18 @@ func GetId(id string) string {
 	}
 }
 
+// Get service org, url, version, arch from service id: <org>/<url>_<version>_<arch>
+func GetServiceInfo(svcId string) (string, string, string, string, error) {
+	svcOrg := GetOrg(svcId)
+	long_id := GetId(svcId)
+	// long_id: bluehorizon.network-services-netspeed_2.3.0_amd64
+	parts := strings.Split(long_id, "_")
+	if len(parts) != 3 {
+		return "", "", "", "", errors.New(fmt.Sprintf("service Id is in wrong format: %v", svcId))
+	}
+	return svcOrg, parts[0], parts[1], parts[2], nil
+}
+
 type PutPostDeleteStandardResponse struct {
 	Code string `json:"code"`
 	Msg  string `json:"msg"`

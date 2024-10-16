@@ -395,12 +395,29 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 	svcAllPol := externalpolicy.ExternalPolicy{}
 
 	for _, svcId := range ag.ServiceId {
+		var builtInSvcPol *externalpolicy.ExternalPolicy
+		if svcOrg, svcUrl, svcVersion, svcArch, err := exchange.GetServiceInfo(svcId); err != nil {
+			glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get service info for %v, error: %v", svcId, err)))
+			return false, false, false
+		} else {
+			builtInSvcPol = externalpolicy.CreateServiceBuiltInPolicy(svcUrl, svcOrg, svcVersion, svcArch)
+		}
+
 		if svcPol, err := exchange.GetServicePolicyWithId(b, svcId); err != nil {
 			glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get service policy for %v from the exchange: %v", svcId, err)))
 			return false, false, false
-		} else if svcPol != nil {
+		} else if svcPol == nil {
+			svcAllPol.MergeWith(builtInSvcPol, false)
+		} else {
+			// get default service properties
+			// svcId: e2edev@somecomp.com/bluehorizon.network-services-netspeed_2.3.0_amd64
+			svcPol.MergeWith(builtInSvcPol, false)
 			svcAllPol.MergeWith(&svcPol.ExternalPolicy, false)
 		}
+	}
+
+	if glog.V(5) {
+		glog.Infof(BCPHlogstring(b.Name(), fmt.Sprintf("For agreement %v merged svc policy is %v", ag.CurrentAgreementId, svcAllPol)))
 	}
 
 	msgPrinter := i18n.GetMessagePrinter()
