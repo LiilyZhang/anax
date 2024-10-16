@@ -410,12 +410,6 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 	if err != nil {
 		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get business policy %v/%v from the exchange: %v", ag.Org, ag.PolicyName, err)))
 		return false, false, false
-	} else if same, msg := busPol.IsSamePolicy(oldPolicy); same {
-		glog.V(3).Infof("business policy %v content remains same with old policy", ag.PolicyName)
-		return true, true, true
-	} else {
-		glog.V(3).Infof("business policy %v content changed, msg: %v", ag.PolicyName, msg)
-		glog.V(3).Infof("updated business policy %v, old policy: %v", busPol, oldPolicy)
 	}
 
 	nodePolHandler := exchange.GetHTTPNodePolicyHandler(b)
@@ -539,6 +533,14 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 			wl.Deployment = svcDef.GetDeploymentString()
 			wl.DeploymentSignature = svcDef.GetDeploymentSignature()
 		}
+	}
+
+	if same, msg := producerPol.IsSamePolicy(oldPolicy); same {
+		glog.V(3).Infof("business policy(producerPol) %v content remains same with old policy", ag.PolicyName)
+		return true, true, true
+	} else {
+		glog.V(3).Infof("business policy %v content changed, msg: %v", ag.PolicyName, msg)
+		glog.V(3).Infof("updated business policy %v, old policy: %v", producerPol, oldPolicy)
 	}
 
 	newTsCs, err := policy.Create_Terms_And_Conditions(producerPol, consumerPol, wl, ag.CurrentAgreementId, b.config.AgreementBot.DefaultWorkloadPW, b.config.AgreementBot.NoDataIntervalS, basicprotocol.PROTOCOL_CURRENT_VERSION)
