@@ -410,6 +410,9 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 	if err != nil {
 		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get business policy %v/%v from the exchange: %v", ag.Org, ag.PolicyName, err)))
 		return false, false, false
+	} else if same, _ := busPol.IsSamePolicy(oldPolicy); same {
+		glog.V(3).Infof("business policy %v content remains same with old policy", ag.PolicyName)
+		return true, true, true
 	}
 
 	nodePolHandler := exchange.GetHTTPNodePolicyHandler(b)
@@ -543,6 +546,7 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 
 	ag.LastPolicyUpdateTime = uint64(time.Now().Unix())
 
+	// this function will send out "basicagreementupdate"
 	b.UpdateAgreement(&ag, basicprotocol.MsgUpdateTypePolicyChange, newTsCs, cph)
 
 	return true, true, true
