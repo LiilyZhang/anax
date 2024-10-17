@@ -400,14 +400,13 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChangeForAgreement(ag persiste
 	svcResolveHandler := exchange.GetHTTPServiceDefResolverHandler(b)
 
 	for _, svcId := range ag.ServiceId {
-		//var builtInSvcPol *externalpolicy.ExternalPolicy
-		if svcOrg, svcUrl, svcVersion, svcArch, err := exchange.GetServiceInfo(svcId); err != nil {
-			glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get service info for %v, error: %v", svcId, err)))
+		if svcDef, err := exchange.GetServiceWithId(b, svcId); err != nil {
+			glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get service %v, error: %v", svcId, err)))
 			return false, false, false
-		} else {
+		} else if svcDef != nil {
 			//builtInSvcPol = externalpolicy.CreateServiceBuiltInPolicy(svcUrl, svcOrg, svcVersion, svcArch)
 
-			if mergedSvcPol, _, _, _, _, err := compcheck.GetServicePolicyWithDefaultProperties(svcPolicyHandler, svcResolveHandler, svcUrl, svcOrg, svcVersion, svcArch, msgPrinter); err != nil {
+			if mergedSvcPol, _, _, _, _, err := compcheck.GetServicePolicyWithDefaultProperties(svcPolicyHandler, svcResolveHandler, svcDef.URL, exchange.GetOrg(svcId), svcDef.Version, svcDef.Arch, msgPrinter); err != nil {
 				glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("failed to get merged service policy for %v, error: %v", svcId, err)))
 				return false, false, false
 			} else if mergedSvcPol != nil {

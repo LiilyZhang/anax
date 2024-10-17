@@ -722,6 +722,52 @@ func ServiceDefResolver(wURL string, wOrg string, wVersion string, wArch string,
 	}
 }
 
+// Retrieve the service object from the exchange. The service_id is prefixed with the org name.
+// It returns nil if there is no such service with given service_id. Service_id is in format: <org>/<Id>
+func GetServiceWithId(ec ExchangeContext, service_id string) (*ServiceDefinition, error) {
+	glog.V(3).Infof(rpclogString(fmt.Sprintf("getting service policy for %v.", service_id)))
+
+	// Get the service object. There should only be 1.
+	var resp interface{}
+	resp = new(GetServicesResponse)
+	var svc ServiceDefinition
+
+	targetURL := fmt.Sprintf("%vorgs/%v/services/%v/", ec.GetExchangeURL(), GetOrg(service_id), GetId(service_id))
+
+	retryCount := ec.GetHTTPFactory().RetryCount
+	retryInterval := ec.GetHTTPFactory().GetRetryInterval()
+	for {
+		if err, tpErr := InvokeExchange(ec.GetHTTPFactory().NewHTTPClient(nil), "GET", targetURL, ec.GetExchangeId(), ec.GetExchangeToken(), nil, &resp); err != nil {
+			glog.Errorf(rpclogString(fmt.Sprintf(err.Error())))
+			return nil, err
+		} else if tpErr != nil {
+			glog.Warningf(rpclogString(fmt.Sprintf(tpErr.Error())))
+			if ec.GetHTTPFactory().RetryCount == 0 {
+				time.Sleep(time.Duration(retryInterval) * time.Second)
+				continue
+			} else if retryCount == 0 {
+				return nil, fmt.Errorf("Exceeded %v retries for error: %v", ec.GetHTTPFactory().RetryCount, tpErr)
+			} else {
+				retryCount--
+				time.Sleep(time.Duration(retryInterval) * time.Second)
+				continue
+			}
+		} else {
+			glog.V(3).Infof(rpclogString(fmt.Sprintf("returning service for %v.", service_id)))
+			services := resp.(*GetServicesResponse)
+			if len(services.Services) == 1 {
+				var cachedSvcDefs map[string]ServiceDefinition
+				svc = services.Services[service_id]
+				updateServiceDefCache(services.Services, cachedSvcDefs, GetOrg(service_id), svc.URL, svc.Arch)
+			} else {
+				glog.V(3).Infof(rpclogString(fmt.Sprintf("service %v not found.", service_id)))
+				return nil, nil
+			}
+			return &svc, nil
+		}
+	}
+}
+
 // This function gets the image docker auths for a service.
 func GetServiceDockerAuths(ec ExchangeContext, url string, org string, version string, arch string) ([]ImageDockerAuth, error) {
 
