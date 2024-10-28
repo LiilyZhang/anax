@@ -496,6 +496,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 		}
 
 		if wi.ConsumerPolicy.PatternId != "" {
+			glog.Infof(BAWlogstring(workerId, fmt.Sprintf("lily - arch synonyms config: %v.", b.config.ArchSynonyms)))
 			// Check the arch of the top level service against the node. If it does not match, then do not make an agreement.
 			// In the pattern case, the top level service spec, arch and version are also put in the node's registeredServices
 			for _, ms_svc := range exchangeDev.RegisteredServices {
@@ -503,14 +504,27 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 					for _, prop := range ms_svc.Properties {
 						if prop.Name == "arch" {
 							// convert the arch to GOARCH standard using synonyms defined in the config
+							/*
+								    "ArchSynonyms": {
+										"x86_64": "amd64",
+										"armhf": "arm",
+										"aarch64": "arm64"
+									}
+							*/
+
+							//amd64
 							arch1 := prop.Value
 							if arch1 != "" && b.config.ArchSynonyms.GetCanonicalArch(arch1) != "" {
 								arch1 = b.config.ArchSynonyms.GetCanonicalArch(arch1)
 							}
+
+							// x86_64
 							arch2 := workload.Arch
 							if arch2 != "" && b.config.ArchSynonyms.GetCanonicalArch(arch2) != "" {
 								arch2 = b.config.ArchSynonyms.GetCanonicalArch(arch2)
 							}
+
+							glog.Infof(BAWlogstring(workerId, fmt.Sprintf("lily - node arch property: %v, workload arch: %v, arch1 %v, arch2 %v", prop.Value, workload.Arch, arch1, arch2)))
 
 							if arch1 != arch2 {
 								glog.Infof(BAWlogstring(workerId, fmt.Sprintf("workload arch %v does not match the device arch %v. Can not make agreement.", workload.Arch, prop.Value)))
