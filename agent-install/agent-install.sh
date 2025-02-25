@@ -3436,6 +3436,8 @@ function check_existing_exch_node_info() {
     log_info "Verifying that node $NODE_ID in the exchange is type $expected_type (if it exists)..."
     local exch_output=$(get_existing_exch_node)
 
+    log_info "exch_output: $exch_output"
+
     if [[ -n "$exch_output" ]]; then
         local exch_node_type=$(echo $exch_output | jq -re '.nodes | .[].nodeType')
         if [[ "$exch_node_type" == "device" ]] && [[ "$expected_type" != "device" ]]; then
@@ -3446,6 +3448,8 @@ function check_existing_exch_node_info() {
 
         local exch_node_namespace=$(echo $exch_output | jq -re '.nodes | .[].clusterNamespace')
         local exch_node_public_key=$(echo $exch_output | jq -re '.nodes | .[].publicKey')
+        log_info "exch_node_namespace: $exch_node_namespace"
+        log_info "exch_node_public_key: $exch_node_public_key"
         if [[ "$exch_node_type" == "cluster" ]] && [[ "$exch_node_public_key" != "" ]] && [[ "$expected_namespace" != "$exch_node_namespace" ]]; then
             log_fatal 2 "Cluster node: $NODE_ID already exists in namespace $exch_node_namespace. To continue, use a different node id or delete existing node from the exchange"
         elif [[ "$exch_node_type" == "cluster" ]] && [[ "$exch_node_public_key" == "" ]]; then
@@ -4332,7 +4336,13 @@ function create_persistent_volume() {
         chk $? 'creating persistent volume claim'
         log_info "persistent volume claim created"
     else
-        log_info "persistent volume claim ${PVC_NAME} exists, skip creating persistent volume claim"
+        log_info "persistent volume claim ${PVC_NAME} exists, check the storageclass in the agent persistent volume claim"
+        sc_in_use=$($KUBECTL get persistentvolumeclaim ${PVC_NAME} -n ${AGENT_NAMESPACE} -o json | jq -r '.spec.storageClassName')
+        if [[ "$sc_in_use" != "${EDGE_CLUSTER_STORAGE_CLASS}" ]]; then
+            log_fatal 3 "existing persistent volume claim ${PVC_NAME} uses a different storageclass: $sc_in_use. Passed in storageclass is ${EDGE_CLUSTER_STORAGE_CLASS}. Delete the agent pvc or set EDGE_CLUSTER_STORAGE_CLASS to $sc_in_use"
+        else
+            log_info "existing persistent volume claim ${PVC_NAME} uses the same storageclass, skip creating persistent volume claim"
+        fi
     fi
 
     log_debug "create_persistent_volume() end"
