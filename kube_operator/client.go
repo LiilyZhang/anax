@@ -16,59 +16,18 @@ import (
 	"github.com/open-horizon/anax/config"
 	"github.com/open-horizon/anax/cutil"
 	"github.com/open-horizon/anax/persistence"
-	olmv1scheme "github.com/operator-framework/api/pkg/operators/v1"
-	olmv1alpha1scheme "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	olmv1client "github.com/operator-framework/operator-lifecycle-manager/pkg/api/client/clientset/versioned/typed/operators/v1"
 	olmv1alpha1client "github.com/operator-framework/operator-lifecycle-manager/pkg/api/client/clientset/versioned/typed/operators/v1alpha1"
 	yaml "gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	v1scheme "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	v1beta1scheme "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/conversion"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	dynamic "k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-)
-
-const (
-	DEFAULT_ANAX_NAMESPACE = "openhorizon-agent"
-	// Name for the env var config map. Only characters allowed: [a-z] "." and "-"
-	HZN_ENV_VARS = "hzn-env-vars"
-	// Variable that contains the name of the config map
-	HZN_ENV_KEY = "HZN_ENV_VARS"
-	// Name for the k8s secrets that contains service secrets. Only characters allowed: [a-z] "." and "-"
-	HZN_SERVICE_SECRETS = "hzn-service-secrets"
-
-	SECRETS_VOLUME_NAME = "service-secrets-vol"
-
-	MMS_VOLUME_NAME = "mms-shared-storage"
-
-	K8S_CLUSTER_ROLE_TYPE          = "ClusterRole"
-	K8S_CLUSTER_ROLEBINDING_TYPE   = "ClusterRoleBinding"
-	K8S_ROLE_TYPE                  = "Role"
-	K8S_ROLEBINDING_TYPE           = "RoleBinding"
-	K8S_DEPLOYMENT_TYPE            = "Deployment"
-	K8S_SERVICEACCOUNT_TYPE        = "ServiceAccount"
-	K8S_CRD_TYPE                   = "CustomResourceDefinition"
-	K8S_NAMESPACE_TYPE             = "Namespace"
-	K8S_SECRET_TYPE                = "Secret"
-	K8S_UNSTRUCTURED_TYPE          = "Unstructured"
-	K8S_OLM_OPERATOR_GROUP_TYPE    = "OperatorGroup"
-	K8S_MMS_SHARED_PVC_NAME        = "mms-shared-storage-pvc"
-	STORAGE_CLASS_USERINPUT_NAME   = "MMS_K8S_STORAGE_CLASS"
-	PVC_SIZE_USERINPUT_NAME        = "MMS_K8S_STORAGE_SIZE"
-	PVC_ACCESS_MODE_USERINPUT_NAME = "MMS_K8S_PVC_ACCESS_MODE"
-	DEFAULT_PVC_SIZE_IN_STRING     = "10"
 )
 
 var (
@@ -82,32 +41,20 @@ var (
 // For example, secrets should be before deployments,
 // because it may be an image pull secret used by the deployment
 func getBaseK8sKinds() []string {
-	return []string{K8S_NAMESPACE_TYPE, K8S_CLUSTER_ROLE_TYPE, K8S_CLUSTER_ROLEBINDING_TYPE, K8S_ROLE_TYPE, K8S_ROLEBINDING_TYPE, K8S_SERVICEACCOUNT_TYPE, K8S_SECRET_TYPE, K8S_CRD_TYPE, K8S_DEPLOYMENT_TYPE}
+	return []string{cutil.K8S_NAMESPACE_TYPE, cutil.K8S_CLUSTER_ROLE_TYPE, cutil.K8S_CLUSTER_ROLEBINDING_TYPE, cutil.K8S_ROLE_TYPE, cutil.K8S_ROLEBINDING_TYPE, cutil.K8S_SERVICEACCOUNT_TYPE, cutil.K8S_SECRET_TYPE, cutil.K8S_CRD_TYPE, cutil.K8S_DEPLOYMENT_TYPE}
 }
 
 func getDangerKinds() []string {
-	return []string{K8S_OLM_OPERATOR_GROUP_TYPE}
+	return []string{cutil.K8S_OLM_OPERATOR_GROUP_TYPE}
 }
 
-func IsBaseK8sType(kind string) bool {
-	return cutil.SliceContains(getBaseK8sKinds(), kind)
-}
+// func IsBaseK8sType(validKind []string, kind string) bool {
+// 	return cutil.SliceContains(getBaseK8sKinds(), kind)
+// }
 
-func IsDangerType(kind string) bool {
-	return cutil.SliceContains(getDangerKinds(), kind)
-}
-
-// Intermediate state for the objects used for k8s api objects that haven't had their exact type asserted yet
-type APIObjects struct {
-	Type   *schema.GroupVersionKind
-	Object interface{}
-}
-
-// Intermediate state used for after the objects have been read from the deployment but not converted to k8s objects yet
-type YamlFile struct {
-	Header tar.Header
-	Body   string
-}
+// func IsDangerType(kind string) bool {
+// 	return cutil.SliceContains(getDangerKinds(), kind)
+// }
 
 // Client to interact with all standard k8s objects
 type KubeClient struct {
@@ -119,15 +66,8 @@ type KubeClient struct {
 
 // KubeStatus contains the status of operator pods and a user-defined status object
 type KubeStatus struct {
-	ContainerStatuses []ContainerStatus
+	ContainerStatuses []cutil.PodContainerStatus
 	OperatorStatus    interface{}
-}
-
-type ContainerStatus struct {
-	Name        string
-	Image       string
-	CreatedTime int64
-	State       string
 }
 
 func NewKubeClient() (*KubeClient, error) {
@@ -135,21 +75,11 @@ func NewKubeClient() (*KubeClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		return nil, err
 	}
 	return &KubeClient{Client: clientset, DynClient: dynClient}, nil
-}
-
-// NewDynamicKubeClient returns a kube client that interacts with unstructured.Unstructured type objects
-func NewDynamicKubeClient() (dynamic.Interface, error) {
-	config, err := cutil.NewKubeConfig()
-	if err != nil {
-		return nil, err
-	}
-	clientset, _ := dynamic.NewForConfig(config)
-	return clientset, nil
 }
 
 // Install creates the objects specified in the operator deployment in the cluster and creates the custom resource to start the operator
@@ -179,10 +109,10 @@ func (c KubeClient) Install(tar string, metadata map[string]interface{}, mmsPVCC
 	}
 
 	// If the namespace was specified in the deployment then create the namespace object so it can be created
-	_, ok := apiObjMap[K8S_NAMESPACE_TYPE]
+	_, ok := apiObjMap[cutil.K8S_NAMESPACE_TYPE]
 	if !ok || namespace != opNamespace {
 		nsObj := corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace"}, ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-		apiObjMap[K8S_NAMESPACE_TYPE] = []APIObjectInterface{NamespaceCoreV1{NamespaceObject: &nsObj}}
+		apiObjMap[cutil.K8S_NAMESPACE_TYPE] = []APIObjectInterface{NamespaceCoreV1{NamespaceObject: &nsObj}}
 	}
 
 	baseK8sComponents := getBaseK8sKinds()
@@ -198,7 +128,7 @@ func (c KubeClient) Install(tar string, metadata map[string]interface{}, mmsPVCC
 	}
 
 	// install any remaining components of unknown type
-	for _, unknownObj := range apiObjMap[K8S_UNSTRUCTURED_TYPE] {
+	for _, unknownObj := range apiObjMap[cutil.K8S_UNSTRUCTURED_TYPE] {
 		if err = unknownObj.Install(c, namespace); err != nil {
 			return err
 		}
@@ -220,12 +150,12 @@ func (c KubeClient) Uninstall(tar string, metadata map[string]interface{}, agId 
 	}
 	namespace := getFinalNamespace(reqNamespace, opNamespace)
 
-	for _, crd := range apiObjMap[K8S_CRD_TYPE] {
+	for _, crd := range apiObjMap[cutil.K8S_CRD_TYPE] {
 		crd.Uninstall(c, namespace)
 	}
 
 	// uninstall any remaining components of unknown type
-	for _, unknownObj := range apiObjMap[K8S_UNSTRUCTURED_TYPE] {
+	for _, unknownObj := range apiObjMap[cutil.K8S_UNSTRUCTURED_TYPE] {
 		glog.Infof(kwlog(fmt.Sprintf("attempting to uninstall %v", unknownObj.Name())))
 		unknownObj.Uninstall(c, namespace)
 	}
@@ -233,9 +163,9 @@ func (c KubeClient) Uninstall(tar string, metadata map[string]interface{}, agId 
 	nodeIsNamespaceScope := cutil.IsNamespaceScoped()
 	nodeNamespace := cutil.GetClusterNamespace()
 	// If the namespace was specified in the deployment then create the namespace object so it can be uninstalled
-	if _, ok := apiObjMap[K8S_NAMESPACE_TYPE]; !ok && namespace != nodeNamespace && !nodeIsNamespaceScope {
+	if _, ok := apiObjMap[cutil.K8S_NAMESPACE_TYPE]; !ok && namespace != nodeNamespace && !nodeIsNamespaceScope {
 		nsObj := corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace"}, ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-		apiObjMap[K8S_NAMESPACE_TYPE] = []APIObjectInterface{NamespaceCoreV1{NamespaceObject: &nsObj}}
+		apiObjMap[cutil.K8S_NAMESPACE_TYPE] = []APIObjectInterface{NamespaceCoreV1{NamespaceObject: &nsObj}}
 	} else if namespace != nodeNamespace {
 		// delete the network policy that allows traffic between the node and service
 		err := c.Client.NetworkingV1().NetworkPolicies(nodeNamespace).Delete(context.Background(), fmt.Sprintf("%s-networkPolicy", agId), metav1.DeleteOptions{})
@@ -258,6 +188,8 @@ func (c KubeClient) Uninstall(tar string, metadata map[string]interface{}, agId 
 	glog.V(3).Infof(kwlog(fmt.Sprintf("Completed removal of all operator objects from the cluster.")))
 	return nil
 }
+
+// this will return the pod list
 func (c KubeClient) OperatorStatus(tar string, metadata map[string]interface{}, agId string, reqNamespace string) (interface{}, error) {
 	apiObjMap, opNamespace, err := ProcessDeployment(tar, metadata, nil, map[string]string{}, "", "", map[string]string{}, agId, 0)
 	if err != nil {
@@ -265,29 +197,29 @@ func (c KubeClient) OperatorStatus(tar string, metadata map[string]interface{}, 
 	}
 	namespace := getFinalNamespace(reqNamespace, opNamespace)
 
-	if len(apiObjMap[K8S_DEPLOYMENT_TYPE]) < 1 {
+	if len(apiObjMap[cutil.K8S_DEPLOYMENT_TYPE]) < 1 {
 		return nil, fmt.Errorf(kwlog(fmt.Sprintf("Error: failed to find operator deployment object.")))
 	}
 
-	status, err := apiObjMap[K8S_DEPLOYMENT_TYPE][0].Status(c, namespace)
+	status, err := apiObjMap[cutil.K8S_DEPLOYMENT_TYPE][0].Status(c, namespace)
 	if err != nil {
 		return nil, err
 	}
 	return status, nil
 }
 
-func (c KubeClient) Status(tar string, metadata map[string]interface{}, agId string, reqNamespace string) ([]ContainerStatus, error) {
+func (c KubeClient) Status(tar string, metadata map[string]interface{}, agId string, reqNamespace string) ([]cutil.PodContainerStatus, error) {
 	apiObjMap, opNamespace, err := ProcessDeployment(tar, metadata, nil, map[string]string{}, "", "", map[string]string{}, agId, 0)
 	if err != nil {
 		return nil, err
 	}
 	namespace := getFinalNamespace(reqNamespace, opNamespace)
 
-	if len(apiObjMap[K8S_DEPLOYMENT_TYPE]) < 1 {
+	if len(apiObjMap[cutil.K8S_DEPLOYMENT_TYPE]) < 1 {
 		return nil, fmt.Errorf(kwlog(fmt.Sprintf("Error: failed to find operator deployment object.")))
 	}
 
-	deployment := apiObjMap[K8S_DEPLOYMENT_TYPE][0]
+	deployment := apiObjMap[cutil.K8S_DEPLOYMENT_TYPE][0]
 
 	podList, err := deployment.Status(c, namespace)
 	if err != nil {
@@ -299,10 +231,10 @@ func (c KubeClient) Status(tar string, metadata map[string]interface{}, agId str
 			return nil, nil
 		}
 		pod := podListTyped.Items[0]
-		containerStatuses := []ContainerStatus{}
+		containerStatuses := []cutil.PodContainerStatus{}
 
 		for _, status := range pod.Status.ContainerStatuses {
-			newStatus := ContainerStatus{Name: pod.ObjectMeta.Name}
+			newStatus := cutil.PodContainerStatus{Name: pod.ObjectMeta.Name}
 			newStatus.Image = status.Image
 			newStatus.Name = status.Name
 			if status.State.Running != nil {
@@ -339,11 +271,11 @@ func (c KubeClient) Update(tar string, metadata map[string]interface{}, agId str
 	}
 	namespace := getFinalNamespace(reqNamespace, opNamespace)
 
-	if len(apiObjMap[K8S_DEPLOYMENT_TYPE]) < 1 {
+	if len(apiObjMap[cutil.K8S_DEPLOYMENT_TYPE]) < 1 {
 		return fmt.Errorf(kwlog(fmt.Sprintf("Error: failed to find operator deployment object.")))
 	}
 
-	deployment := apiObjMap[K8S_DEPLOYMENT_TYPE][0] // deployment with updated secrets
+	deployment := apiObjMap[cutil.K8S_DEPLOYMENT_TYPE][0] // deployment with updated secrets
 	err = deployment.Update(c, namespace)
 	if err != nil {
 		return err
@@ -362,7 +294,8 @@ func ProcessDeployment(tar string, metadata map[string]interface{}, mmsPVCConfig
 	}
 
 	// Convert the yaml files to kubernetes objects
-	k8sObjs, customResources, err := getK8sObjectFromYaml(yamls, nil)
+	//k8sObjs, customResources, err := getK8sObjectFromYaml(yamls, nil)
+	k8sObjs, customResources, err := cutil.GetK8sObjectFromYaml(yamls, nil, getBaseK8sKinds(), getDangerKinds())
 	if err != nil {
 		return nil, "", err
 	}
@@ -390,7 +323,7 @@ func (c KubeClient) CreateConfigMap(envVars map[string]string, agId string, name
 		delete(envVars, "")
 	}
 	// hzn-env-vars-<agId>
-	hznEnvConfigMap := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%s", HZN_ENV_VARS, agId)}, Data: envVars}
+	hznEnvConfigMap := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%s", cutil.HZN_ENV_VARS, agId)}, Data: envVars}
 	res, err := c.Client.CoreV1().ConfigMaps(namespace).Create(context.Background(), &hznEnvConfigMap, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("Error: failed to create config map for %s: %v", agId, err)
@@ -401,7 +334,7 @@ func (c KubeClient) CreateConfigMap(envVars map[string]string, agId string, name
 // DeleteConfigMap will delete the config map with the provided name
 func (c KubeClient) DeleteConfigMap(agId string, namespace string) error {
 	// hzn-env-vars-<agId>
-	hznEnvConfigmapName := fmt.Sprintf("%s-%s", HZN_ENV_VARS, agId)
+	hznEnvConfigmapName := fmt.Sprintf("%s-%s", cutil.HZN_ENV_VARS, agId)
 	err := c.Client.CoreV1().ConfigMaps(namespace).Delete(context.Background(), hznEnvConfigmapName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("Error: failed to delete config map for %s: %v", agId, err)
@@ -481,8 +414,8 @@ func (c KubeClient) DeleteESSCertSecrets(agId string, namespace string) error {
 
 // CreateK8SSecrets will create a k8s secrets object which contains the service secret name and value
 func (c KubeClient) CreateK8SSecrets(serviceSecretsMap map[string]string, agId string, namespace string) (string, error) {
-	secretsLabel := map[string]string{"name": HZN_SERVICE_SECRETS}
-	hznServiceSecrets := corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%s", HZN_SERVICE_SECRETS, agId), Labels: secretsLabel}, StringData: serviceSecretsMap}
+	secretsLabel := map[string]string{"name": cutil.HZN_SERVICE_SECRETS}
+	hznServiceSecrets := corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%s", cutil.HZN_SERVICE_SECRETS, agId), Labels: secretsLabel}, StringData: serviceSecretsMap}
 	res, err := c.Client.CoreV1().Secrets(namespace).Create(context.Background(), &hznServiceSecrets, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("Error: failed to create k8s secrets that contains service secrets for %s: %v", agId, err)
@@ -493,7 +426,7 @@ func (c KubeClient) CreateK8SSecrets(serviceSecretsMap map[string]string, agId s
 // DeleteK8SSecrets will delete k8s secrets object which contains the service secret name and value
 func (c KubeClient) DeleteK8SSecrets(agId string, namespace string) error {
 	// delete the secrets contains agreement service vault secrets
-	secretsName := fmt.Sprintf("%s-%s", HZN_SERVICE_SECRETS, agId)
+	secretsName := fmt.Sprintf("%s-%s", cutil.HZN_SERVICE_SECRETS, agId)
 	err := c.Client.CoreV1().Secrets(namespace).Delete(context.Background(), secretsName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("Error: failed to delete k8s secrets that contains service secrets for %s: %v", agId, err)
@@ -504,17 +437,17 @@ func (c KubeClient) DeleteK8SSecrets(agId string, namespace string) error {
 func (c KubeClient) CreateMMSPVC(envVars map[string]string, mmsPVCConfig map[string]interface{}, agId string, namespace string) (string, error) {
 	storageClass, accessModes, _ := cutil.GetAgentPVCInfo()
 
-	if scInUserinput, ok := envVars[STORAGE_CLASS_USERINPUT_NAME]; ok {
+	if scInUserinput, ok := envVars[cutil.STORAGE_CLASS_USERINPUT_NAME]; ok {
 		storageClass = scInUserinput
 	}
 
-	if accessModeInUserinput, ok := envVars[PVC_ACCESS_MODE_USERINPUT_NAME]; ok {
+	if accessModeInUserinput, ok := envVars[cutil.PVC_ACCESS_MODE_USERINPUT_NAME]; ok {
 		if m, ok := accessModeMap[accessModeInUserinput]; ok {
 			accessModes = []corev1.PersistentVolumeAccessMode{m}
 		}
 	}
 
-	pvcSizeInString := DEFAULT_PVC_SIZE_IN_STRING
+	pvcSizeInString := cutil.DEFAULT_PVC_SIZE_IN_STRING
 	if size, ok := mmsPVCConfig["pvcSize"]; ok {
 		sizeInServiceDef := int64(size.(float64))
 		if sizeInServiceDef > 0 {
@@ -522,11 +455,11 @@ func (c KubeClient) CreateMMSPVC(envVars map[string]string, mmsPVCConfig map[str
 		}
 	}
 
-	if pvcSizeInUserInput, ok := envVars[PVC_SIZE_USERINPUT_NAME]; ok {
+	if pvcSizeInUserInput, ok := envVars[cutil.PVC_SIZE_USERINPUT_NAME]; ok {
 		pvcSizeInString = pvcSizeInUserInput
 	}
 
-	mmsPvcName := fmt.Sprintf("%s-%s", K8S_MMS_SHARED_PVC_NAME, agId)
+	mmsPvcName := fmt.Sprintf("%s-%s", cutil.K8S_MMS_SHARED_PVC_NAME, agId)
 	mmsPVC := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mmsPvcName,
@@ -535,7 +468,7 @@ func (c KubeClient) CreateMMSPVC(envVars map[string]string, mmsPVCConfig map[str
 		Spec: corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &storageClass,
 			AccessModes:      accessModes,
-			Resources: corev1.ResourceRequirements{
+			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%vGi", pvcSizeInString)),
 				},
@@ -554,7 +487,7 @@ func (c KubeClient) CreateMMSPVC(envVars map[string]string, mmsPVCConfig map[str
 }
 
 func (c KubeClient) DeleteMMSPVC(agId string, namespace string) error {
-	mmsPvcName := fmt.Sprintf("%s-%s", K8S_MMS_SHARED_PVC_NAME, agId)
+	mmsPvcName := fmt.Sprintf("%s-%s", cutil.K8S_MMS_SHARED_PVC_NAME, agId)
 
 	err := c.Client.CoreV1().PersistentVolumeClaims(namespace).Delete(context.Background(), mmsPvcName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
@@ -563,7 +496,7 @@ func (c KubeClient) DeleteMMSPVC(agId string, namespace string) error {
 	return nil
 }
 
-func unstructuredObjectFromYaml(crStr YamlFile) (*unstructured.Unstructured, error) {
+func unstructuredObjectFromYaml(crStr cutil.YamlFile) (*unstructured.Unstructured, error) {
 	cr := make(map[string]interface{})
 	err := yaml.UnmarshalStrict([]byte(crStr.Body), &cr)
 	if err != nil {
@@ -577,7 +510,7 @@ func unstructuredObjectFromYaml(crStr YamlFile) (*unstructured.Unstructured, err
 
 // add a reference to the envvar config map to the deployment
 func addConfigMapVarToDeploymentObject(deployment appsv1.Deployment, configMapName string) appsv1.Deployment {
-	hznEnvVar := corev1.EnvVar{Name: HZN_ENV_KEY, Value: configMapName}
+	hznEnvVar := corev1.EnvVar{Name: cutil.HZN_ENV_KEY, Value: configMapName}
 	i := len(deployment.Spec.Template.Spec.Containers) - 1
 	for i >= 0 {
 		newEnv := append(deployment.Spec.Template.Spec.Containers[i].Env, hznEnvVar)
@@ -590,7 +523,7 @@ func addConfigMapVarToDeploymentObject(deployment appsv1.Deployment, configMapNa
 // add a reference to the secrets service secrets to the deployment
 func addServiceSecretsToDeploymentObject(deployment appsv1.Deployment, secretsName string) appsv1.Deployment {
 	// Add secrets (secretsName is $HZN_SERVICE_SECRETS-$agId: hzn-service-secrets-12345) as Volume in deployment
-	volumeName := SECRETS_VOLUME_NAME
+	volumeName := cutil.SECRETS_VOLUME_NAME
 	volume := corev1.Volume{Name: volumeName, VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretsName}}}
 	volumes := append(deployment.Spec.Template.Spec.Volumes, volume)
 	deployment.Spec.Template.Spec.Volumes = volumes
@@ -633,66 +566,9 @@ func makeAllKeysStrings(unmarshYaml interface{}) interface{} {
 	return unmarshYaml
 }
 
-// Convert the given yaml files into k8s api objects
-func getK8sObjectFromYaml(yamlFiles []YamlFile, sch *runtime.Scheme) ([]APIObjects, []YamlFile, error) {
-	retObjects := []APIObjects{}
-	customResources := []YamlFile{}
-
-	if sch == nil {
-		sch = runtime.NewScheme()
-	}
-
-	// This is required to allow the schema to recognize custom resource definition types
-	_ = v1beta1scheme.AddToScheme(sch)
-	_ = v1scheme.AddToScheme(sch)
-	_ = scheme.AddToScheme(sch)
-	_ = olmv1alpha1scheme.AddToScheme(sch)
-	_ = olmv1scheme.AddToScheme(sch)
-
-	// multiple yaml files can be in one file separated by '---'
-	// these are split here and rejoined with the single files
-	indivYamls := []YamlFile{}
-	for _, file := range yamlFiles {
-		if multFiles := strings.Split(file.Body, "---"); len(multFiles) > 1 {
-			for _, indivYaml := range multFiles {
-				if strings.TrimSpace(indivYaml) != "" {
-					indivYamls = append(indivYamls, YamlFile{Body: indivYaml})
-				}
-			}
-		} else {
-			indivYamls = append(indivYamls, file)
-		}
-	}
-
-	for _, fileStr := range indivYamls {
-		decode := serializer.NewCodecFactory(sch).UniversalDecoder(v1beta1scheme.SchemeGroupVersion, v1scheme.SchemeGroupVersion, rbacv1.SchemeGroupVersion, appsv1.SchemeGroupVersion, corev1.SchemeGroupVersion, olmv1alpha1scheme.SchemeGroupVersion, olmv1scheme.SchemeGroupVersion).Decode
-		obj, gvk, err := decode([]byte(fileStr.Body), nil, nil)
-
-		if err != nil {
-			customResources = append(customResources, fileStr)
-		} else if IsBaseK8sType(gvk.Kind) {
-			newObj := APIObjects{Type: gvk, Object: obj}
-			retObjects = append(retObjects, newObj)
-		} else if IsDangerType(gvk.Kind) {
-			// the scheme has recognized this type but does not provide the function for converting it to an unstructured object. skip this one to avoid a panic.
-			glog.Errorf(kwlog(fmt.Sprintf("Skipping unsupported kind %v", gvk.Kind)))
-		} else {
-			newUnstructObj := unstructured.Unstructured{}
-			err = sch.Convert(obj, &newUnstructObj, conversion.Meta{})
-			if err != nil {
-				glog.Errorf("Err converting object to unstructured: %v", err)
-			}
-			newObj := APIObjects{Type: gvk, Object: &newUnstructObj}
-			retObjects = append(retObjects, newObj)
-		}
-	}
-
-	return retObjects, customResources, nil
-}
-
 // Read the compressed tar file from the operator deployments section
-func getYamlFromTarGz(deploymentString string) ([]YamlFile, error) {
-	files := []YamlFile{}
+func getYamlFromTarGz(deploymentString string) ([]cutil.YamlFile, error) {
+	files := []cutil.YamlFile{}
 
 	archiveData, err := base64.StdEncoding.DecodeString(deploymentString)
 	if err != nil {
@@ -718,7 +594,7 @@ func getYamlFromTarGz(deploymentString string) ([]YamlFile, error) {
 			if err != nil {
 				return files, fmt.Errorf("error reading tar file: %v", err)
 			}
-			newFile := YamlFile{Header: *header, Body: string(tar)}
+			newFile := cutil.YamlFile{Header: *header, Body: string(tar)}
 			files = append(files, newFile)
 		} else {
 			return files, err

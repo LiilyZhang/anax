@@ -344,6 +344,12 @@ func (a *EstablishedAgreement) GetDeploymentConfig() DeploymentConfig {
 			glog.Errorf("Unable to convert kube deployment %v to persistent form, error %v", a.ExtendedDeployment, err)
 		}
 		return cd
+	} else if IsHelm3(a.ExtendedDeployment) {
+		h3d := new(Helm3DeploymentConfig)
+		if err := h3d.FromPersistentForm(a.ExtendedDeployment); err != nil {
+			glog.Errorf("Unable to convert helm3 deployment %v to persistent form, error %v", a.ExtendedDeployment, err)
+		}
+		return h3d
 	} else if IsHelm(a.ExtendedDeployment) {
 		hd := new(HelmDeploymentConfig)
 		if err := hd.FromPersistentForm(a.ExtendedDeployment); err != nil {

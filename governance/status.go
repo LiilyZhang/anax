@@ -12,6 +12,7 @@ import (
 	"github.com/open-horizon/anax/exchange"
 	"github.com/open-horizon/anax/exchangesync"
 	"github.com/open-horizon/anax/helm"
+	"github.com/open-horizon/anax/helm3"
 	"github.com/open-horizon/anax/kube_operator"
 	"github.com/open-horizon/anax/persistence"
 	"github.com/open-horizon/anax/policy"
@@ -214,13 +215,15 @@ func (w *GovernanceWorker) getServiceStatus(containers []docker.APIContainers) (
 						agId = ags[0].CurrentAgreementId
 					}
 
-					// get status
+					// get operator status
 					opStatus, err := GetOperatorStatus(deployment, agId, reqNamespace)
 					if err != nil {
 						glog.Errorf(logString(fmt.Sprintf("Error getting operator status: %v", err)))
 					} else {
 						msdef_status.OperatorStatus = opStatus
 					}
+
+					// TODO: Lily set helm3 status in msdef_status?
 				}
 			}
 			if msinsts, err := persistence.GetAllMicroserviceInstancesWithDefId(w.db, msdef.Id, false, false); err != nil {
@@ -283,19 +286,21 @@ func GetContainerStatus(deployment string, key string, infrastructure bool, cont
 			glog.Infof("container_status=%v", container_status)
 			status = append(status, container_status)
 		}
-	} else if hdc, err := persistence.GetHelmDeployment(deployment); err == nil {
+	} else if h3dc, err := persistence.GetHelm3Deployment(deployment); err == nil {
 		var container_status exchange.ContainerStatus
-		container_status.Name = fmt.Sprintf("Helm release: %v", hdc.ReleaseName)
+		container_status.Name = fmt.Sprintf("Helm3 release: %v", h3dc.ReleaseName)
 
-		hc := helm.NewHelmClient()
 		releaseState := "Not Running"
-		if rs, err := hc.Status(hdc.ReleaseName); err != nil {
+		if h3c, err := helm3.NewHelm3Client(); err != nil {
 			releaseState = fmt.Sprintf("Unknown, error: %v", err)
+		} else if rs, err := h3c.ReleaseStatus(h3dc.ReleaseName, reqClusterNamespace); err != nil {
+			releaseState = fmt.Sprintf("Unknown, error: %v", err)
+		} else if rs.Info == nil {
+			releaseState = fmt.Sprintf("Unknown, error: release %v info is nil", h3dc.ReleaseName)
 		} else {
-			releaseState = rs.Status
-			cDate := cutil.TimeInSeconds(rs.Updated, hc.ReleaseTimeFormat())
-			container_status.Created = cDate
-			container_status.Image = rs.ChartName
+			releaseState = string(rs.Info.Status)
+			container_status.Created = rs.Info.FirstDeployed.Unix()
+			container_status.Image = rs.Chart.Name()
 		}
 		container_status.State = releaseState
 		status = append(status, container_status)
@@ -320,6 +325,22 @@ func GetContainerStatus(deployment string, key string, infrastructure bool, cont
 				}
 			}
 		}
+	} else if hdc, err := persistence.GetHelmDeployment(deployment); err == nil {
+		var container_status exchange.ContainerStatus
+		container_status.Name = fmt.Sprintf("Helm release: %v", hdc.ReleaseName)
+
+		hc := helm.NewHelmClient()
+		releaseState := "Not Running"
+		if rs, err := hc.Status(hdc.ReleaseName); err != nil {
+			releaseState = fmt.Sprintf("Unknown, error: %v", err)
+		} else {
+			releaseState = rs.Status
+			cDate := cutil.TimeInSeconds(rs.Updated, hc.ReleaseTimeFormat())
+			container_status.Created = cDate
+			container_status.Image = rs.ChartName
+		}
+		container_status.State = releaseState
+		status = append(status, container_status)
 	} else {
 		return nil, fmt.Errorf(logString(fmt.Sprintf("Error Unmarshalling deployment string %v. %v", deployment, err)))
 	}
@@ -339,6 +360,16 @@ func GetOperatorStatus(deployment string, agId string, reqNamespace string) (int
 			return nil, fmt.Errorf(logString(fmt.Sprintf("Error retrieving operator status from cluster, error: %v", err)))
 		}
 		return opStatus, nil
+	} else if hd, err := persistence.GetHelm3Deployment(deployment); err == nil {
+		client, err := helm3.NewHelm3Client()
+		if err != nil {
+			return nil, fmt.Errorf(logString(fmt.Sprintf("Error retrieving helm3 pod status from cluster, error: %v", err)))
+		}
+		releaseFullStatus, err := client.ResourceStatus(hd.ReleaseName, reqNamespace)
+		if err != nil {
+			return nil, fmt.Errorf(logString(fmt.Sprintf("Error retrieving helm3 resources status from cluster, error: %v", err)))
+		}
+		return releaseFullStatus, nil
 	}
 	return nil, nil
 }
@@ -396,6 +427,7 @@ func (w *GovernanceWorker) surfaceErrors() int {
 }
 
 func changeInWorkloadStatuses(newStatuses []persistence.WorkloadStatus, oldStatuses []persistence.WorkloadStatus) bool {
+	glog.Infof(logString("lily - check if there is a change in workload status"))
 	if len(oldStatuses) != len(newStatuses) {
 		return true
 	}
@@ -435,7 +467,12 @@ func deleteResourceVersionFromOperatorStatus(OperatorStatus interface{}) {
 	if glog.V(5) {
 		glog.Infof(logString("delete resource version from operatorStatus"))
 	}
+	glog.Infof(logString("lily - delete resource version from operatorStatus"))
 	switch v := OperatorStatus.(type) {
+	case exchange.HelmStatus:
+		// resourceStatus := v.ReleaseResourceStatus
+		// //map[string][]runtime.Object
+		// do nothing
 	case map[string]interface{}:
 		delete(v, "metadata")
 	default:

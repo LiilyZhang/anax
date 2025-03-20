@@ -26,7 +26,7 @@ func GetKubeDeployment(deployStr string) (*KubeDeploymentConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling deployment config as KubeDeployment: %v", err)
 	} else if kd.OperatorYamlArchive == "" {
-		return nil, fmt.Errorf("required field 'operatorYamlArchive' is missing in the deployment string.")
+		return nil, fmt.Errorf("required field 'operatorYamlArchive' is missing in the deployment string")
 	}
 	return kd, nil
 }
@@ -55,6 +55,10 @@ func (k *KubeDeploymentConfig) ToPersistentForm() (map[string]interface{}, error
 }
 
 func (k *KubeDeploymentConfig) IsNative() bool {
+	return false
+}
+
+func (k *KubeDeploymentConfig) IsHelm3() bool {
 	return false
 }
 

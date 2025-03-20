@@ -433,6 +433,18 @@ func (w ContainerStatus) String() string {
 		w.Name, w.Image, w.Created, w.State)
 }
 
+type HelmStatus struct {
+	ReleaseName           string      `json:"releaseName"`
+	Namespace             string      `json:"namespace"`
+	Status                string      `json:"status"`
+	Revision              int         `json:"revision"`
+	ChartVersion          string      `json:"chartVersion"`
+	AppVersion            string      `json:"appVersion"` // AppVersion returns version of the app beging deployed by the chart.
+	FirstDeployed         int64       `json:"firstDeployed"`
+	LastDeployed          int64       `json:"lastDeployed"`
+	ReleaseResourceStatus interface{} `json:"releaseResourceStatus"`
+}
+
 type WorkloadStatus struct {
 	AgreementId    string            `json:"agreementId"`
 	ServiceURL     string            `json:"serviceUrl,omitempty"`

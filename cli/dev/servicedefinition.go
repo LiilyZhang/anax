@@ -52,7 +52,7 @@ func CreateServiceDefinition(directory string, specRef string, imageInfo map[str
 	res.Sharable = exchangecommon.SERVICE_SHARING_MODE_MULTIPLE
 	if noImageGen || specRef == "" || !cutil.SliceContains(deploymentType, "native") {
 		res.UserInputs = []exchangecommon.UserInput{
-			exchangecommon.UserInput{
+			{
 				Name:         "",
 				Label:        "",
 				Type:         "",
@@ -61,7 +61,7 @@ func CreateServiceDefinition(directory string, specRef string, imageInfo map[str
 		}
 	} else {
 		res.UserInputs = []exchangecommon.UserInput{
-			exchangecommon.UserInput{
+			{
 				Name:         "HW_WHO",
 				Label:        msgPrinter.Sprintf("Who to say hello to"),
 				Type:         "string",
