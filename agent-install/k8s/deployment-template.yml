@@ -87,8 +87,8 @@ spec:
           capabilities:
             drop: ["ALL"]
         envFrom:
-          - configMapRef:
-              name: openhorizon-agent-config
+        - configMapRef:
+            name: openhorizon-agent-config
         env:
         - name: HZN_ORG_ID
           value: __OrgId__

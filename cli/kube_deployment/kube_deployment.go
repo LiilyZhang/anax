@@ -178,9 +178,11 @@ func (p *KubeDeploymentConfigPlugin) StartTest(homeDirectory string, userInputFi
 	// support start and stop, terminate with a fatal error.
 	if serviceDef.Deployment != nil {
 		return false
-	} else {
-		cliutils.Fatal(cliutils.CLI_GENERAL_ERROR, msgPrinter.Sprintf("'%v %v' not supported for services using a %v deployment configuration", dev.SERVICE_COMMAND, dev.SERVICE_START_COMMAND, KUBE_DEPLOYMENT_CONFIG_TYPE))
+	} else if owned, err := p.Validate(nil, serviceDef.ClusterDeployment); !owned || err != nil {
+		return false
 	}
+
+	cliutils.Fatal(cliutils.CLI_GENERAL_ERROR, msgPrinter.Sprintf("'%v %v' not supported for services using a %v deployment configuration", dev.SERVICE_COMMAND, dev.SERVICE_START_COMMAND, KUBE_DEPLOYMENT_CONFIG_TYPE))
 
 	// For the compiler
 	return true
