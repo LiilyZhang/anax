@@ -21,6 +21,7 @@ import (
 	"github.com/open-horizon/anax/exchange"
 	_ "github.com/open-horizon/anax/externalpolicy/text_language"
 	"github.com/open-horizon/anax/governance"
+	"github.com/open-horizon/anax/helm3"
 	"github.com/open-horizon/anax/i18n"
 	_ "github.com/open-horizon/anax/i18n_messages"
 	"github.com/open-horizon/anax/imagefetch"
@@ -189,6 +190,7 @@ func main() {
 			workers.Add(imageWorker)
 		}
 		workers.Add(kube_operator.NewKubeWorker("Kube", cfg, db, authm, secretm))
+		workers.Add(helm3.NewHelm3Worker("Helm3", cfg, db, authm, secretm))
 		workers.Add(resource.NewResourceWorker("Resource", cfg, db, authm))
 		workers.Add(changes.NewChangesWorker("ExchangeChanges", cfg, db))
 		workers.Add(nodemanagement.NewNodeManagementWorker("NodeManagement", cfg, db))

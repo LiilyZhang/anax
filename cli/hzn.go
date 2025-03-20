@@ -13,6 +13,7 @@ import (
 	"github.com/open-horizon/anax/cli/eventlog"
 	"github.com/open-horizon/anax/cli/exchange"
 	"github.com/open-horizon/anax/cli/fdo"
+	helm3_deployment "github.com/open-horizon/anax/cli/helm3_deployment"
 	_ "github.com/open-horizon/anax/cli/i18n_messages"
 	"github.com/open-horizon/anax/cli/key"
 	"github.com/open-horizon/anax/cli/kube_deployment"
@@ -271,7 +272,7 @@ Environment Variables:
 	devServiceNewCmdNoImageGen := devServiceNewCmd.Flag("noImageGen", msgPrinter.Sprintf("Indicates that the image is built somewhere else. No image sample code will be created by this command. If this flag is not specified, files for generating a simple service image will be created under current directory.")).Bool()
 	devServiceNewCmdNoPattern := devServiceNewCmd.Flag("noPattern", msgPrinter.Sprintf("Indicates no pattern definition file will be created.")).Bool()
 	devServiceNewCmdNoPolicy := devServiceNewCmd.Flag("noPolicy", msgPrinter.Sprintf("Indicate no policy file will be created.")).Bool()
-	devServiceNewCmdCfg := devServiceNewCmd.Flag("dconfig", msgPrinter.Sprintf("Indicates the type of deployment configuration that will be used, native (the default), or %v. This flag can be specified more than once to create a service with more than 1 kind of deployment configuration.", kube_deployment.KUBE_DEPLOYMENT_CONFIG_TYPE)).Short('c').Default("native").Strings()
+	devServiceNewCmdCfg := devServiceNewCmd.Flag("dconfig", msgPrinter.Sprintf("Indicates the type of deployment configuration that will be used, native (the default), %v, or %v. This flag can be specified more than once to create a service with more than 1 kind of deployment configuration.", kube_deployment.KUBE_DEPLOYMENT_CONFIG_TYPE, helm3_deployment.HELM3_DEPLOYMENT_CONFIG_TYPE)).Short('c').Default("native").Strings()
 	devServiceStartTestCmd := devServiceCmd.Command("start", msgPrinter.Sprintf("Run a service in a mocked Horizon Agent environment. This command is not supported for services using the %v deployment configuration.", kube_deployment.KUBE_DEPLOYMENT_CONFIG_TYPE))
 	devServiceUserInputFile := devServiceStartTestCmd.Flag("userInputFile", msgPrinter.Sprintf("File containing user input values for running a test. If omitted, the userinput file for the project will be used.")).Short('f').String()
 	devServiceConfigFile := devServiceStartTestCmd.Flag("configFile", msgPrinter.Sprintf("File to be made available through the sync service APIs. This flag can be repeated to populate multiple files.")).Short('m').Strings()
