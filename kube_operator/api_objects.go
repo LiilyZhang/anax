@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/config"
 	"github.com/open-horizon/anax/cutil"
@@ -23,6 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamic "k8s.io/client-go/dynamic"
+	"strings"
+	"time"
 )
 
 type APIObjectInterface interface {
@@ -37,7 +36,7 @@ type APIObjectInterface interface {
 // Sort a slice of k8s api objects by kind of object
 // Returns a map of object type names to api object interfaces types, the namespace to be used for the operator, and an error if one occurs
 // Also verifies that all objects are named so they can be found and uninstalled
-func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstructured.Unstructured, metadata map[string]interface{}, mmsPVCConfig map[string]interface{}, envVarMap map[string]string, fssAuthFilePath string, fssCertFilePath string, secretsMap map[string]string, agreementId string, crInstallTimeout int64) (map[string][]APIObjectInterface, string, error) {
+func sortAPIObjects(allObjects []cutil.APIObjects, customResources map[string][]*unstructured.Unstructured, metadata map[string]interface{}, mmsPVCConfig map[string]interface{}, envVarMap map[string]string, fssAuthFilePath string, fssCertFilePath string, secretsMap map[string]string, agreementId string, crInstallTimeout int64) (map[string][]APIObjectInterface, string, error) {
 	namespace := ""
 
 	// get the namespace from metadata
@@ -51,12 +50,12 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 	objMap := map[string][]APIObjectInterface{}
 	for _, obj := range allObjects {
 		switch obj.Type.Kind {
-		case K8S_NAMESPACE_TYPE:
+		case cutil.K8S_NAMESPACE_TYPE:
 			if typedNS, ok := obj.Object.(*corev1.Namespace); ok {
 				newNs := NamespaceCoreV1{NamespaceObject: typedNS}
 				if newNs.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes namespace object %s.", newNs.Name())))
-					objMap[K8S_NAMESPACE_TYPE] = append(objMap[K8S_NAMESPACE_TYPE], newNs)
+					objMap[cutil.K8S_NAMESPACE_TYPE] = append(objMap[cutil.K8S_NAMESPACE_TYPE], newNs)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: namespace object must have a name in its metadata section.")))
 				}
@@ -67,55 +66,55 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: namespace object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_ROLE_TYPE:
+		case cutil.K8S_ROLE_TYPE:
 			if typedRole, ok := obj.Object.(*rbacv1.Role); ok {
 				newRole := RoleRbacV1{RoleObject: typedRole}
 				if newRole.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes role object %s.", newRole.Name())))
-					objMap[K8S_ROLE_TYPE] = append(objMap[K8S_ROLE_TYPE], newRole)
+					objMap[cutil.K8S_ROLE_TYPE] = append(objMap[cutil.K8S_ROLE_TYPE], newRole)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: role object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: role object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_ROLEBINDING_TYPE:
+		case cutil.K8S_ROLEBINDING_TYPE:
 			if typedRoleBinding, ok := obj.Object.(*rbacv1.RoleBinding); ok {
 				newRolebinding := RolebindingRbacV1{RolebindingObject: typedRoleBinding}
 				if newRolebinding.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes rolebinding object %s.", newRolebinding.Name())))
-					objMap[K8S_ROLEBINDING_TYPE] = append(objMap[K8S_ROLEBINDING_TYPE], newRolebinding)
+					objMap[cutil.K8S_ROLEBINDING_TYPE] = append(objMap[cutil.K8S_ROLEBINDING_TYPE], newRolebinding)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: rolebinding object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: rolebinding object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_CLUSTER_ROLE_TYPE:
+		case cutil.K8S_CLUSTER_ROLE_TYPE:
 			if typedRole, ok := obj.Object.(*rbacv1.ClusterRole); ok {
 				newRole := ClusterRoleRbacV1{ClusterRoleObject: typedRole}
 				if newRole.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes cluster role object %s.", newRole.Name())))
-					objMap[K8S_CLUSTER_ROLE_TYPE] = append(objMap[K8S_CLUSTER_ROLE_TYPE], newRole)
+					objMap[cutil.K8S_CLUSTER_ROLE_TYPE] = append(objMap[cutil.K8S_CLUSTER_ROLE_TYPE], newRole)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: cluster role object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: cluster role object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_CLUSTER_ROLEBINDING_TYPE:
+		case cutil.K8S_CLUSTER_ROLEBINDING_TYPE:
 			if typedRoleBinding, ok := obj.Object.(*rbacv1.ClusterRoleBinding); ok {
 				newRolebinding := ClusterRolebindingRbacV1{ClusterRolebindingObject: typedRoleBinding}
 				if newRolebinding.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes cluser rolebinding object %s.", newRolebinding.Name())))
-					objMap[K8S_CLUSTER_ROLEBINDING_TYPE] = append(objMap[K8S_CLUSTER_ROLEBINDING_TYPE], newRolebinding)
+					objMap[cutil.K8S_CLUSTER_ROLEBINDING_TYPE] = append(objMap[cutil.K8S_CLUSTER_ROLEBINDING_TYPE], newRolebinding)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: rolebinding object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: rolebinding object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_SECRET_TYPE:
+		case cutil.K8S_SECRET_TYPE:
 			if typedSecret, ok := obj.Object.(*corev1.Secret); ok {
 				if typedSecret.ObjectMeta.Namespace != "" {
 					if namespace == "" {
@@ -127,14 +126,14 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 				newSecret := SecretCoreV1{SecretObject: typedSecret}
 				if newSecret.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes secret object %s.", newSecret.Name())))
-					objMap[K8S_SECRET_TYPE] = append(objMap[K8S_SECRET_TYPE], newSecret)
+					objMap[cutil.K8S_SECRET_TYPE] = append(objMap[cutil.K8S_SECRET_TYPE], newSecret)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: secret object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: secret object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_DEPLOYMENT_TYPE:
+		case cutil.K8S_DEPLOYMENT_TYPE:
 			if typedDeployment, ok := obj.Object.(*appsv1.Deployment); ok {
 				if typedDeployment.ObjectMeta.Namespace != "" {
 					if namespace == "" {
@@ -146,26 +145,26 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 				newDeployment := DeploymentAppsV1{DeploymentObject: typedDeployment, EnvVarMap: envVarMap, FssAuthFilePath: fssAuthFilePath, FssCertFilePath: fssCertFilePath, MMSPVCConfig: mmsPVCConfig, ServiceSecrets: secretsMap, AgreementId: agreementId}
 				if newDeployment.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes deployment object %s.", newDeployment.Name())))
-					objMap[K8S_DEPLOYMENT_TYPE] = append(objMap[K8S_DEPLOYMENT_TYPE], newDeployment)
+					objMap[cutil.K8S_DEPLOYMENT_TYPE] = append(objMap[cutil.K8S_DEPLOYMENT_TYPE], newDeployment)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: deployment object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: deployment object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_SERVICEACCOUNT_TYPE:
+		case cutil.K8S_SERVICEACCOUNT_TYPE:
 			if typedServiceAccount, ok := obj.Object.(*corev1.ServiceAccount); ok {
 				newServiceAccount := ServiceAccountCoreV1{ServiceAccountObject: typedServiceAccount}
 				if newServiceAccount.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes service account object %s.", newServiceAccount.Name())))
-					objMap[K8S_SERVICEACCOUNT_TYPE] = append(objMap[K8S_SERVICEACCOUNT_TYPE], newServiceAccount)
+					objMap[cutil.K8S_SERVICEACCOUNT_TYPE] = append(objMap[cutil.K8S_SERVICEACCOUNT_TYPE], newServiceAccount)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: service account object must have a name in its metadata section.")))
 				}
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: service account object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
-		case K8S_CRD_TYPE:
+		case cutil.K8S_CRD_TYPE:
 			if typedCRD, ok := obj.Object.(*crdv1beta1.CustomResourceDefinition); ok {
 				kind := typedCRD.Spec.Names.Kind
 				if kind == "" {
@@ -178,7 +177,7 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 				newCustomResource := CustomResourceV1Beta1{CustomResourceDefinitionObject: typedCRD, CustomResourceObjectList: customResourceList, InstallTimeout: crInstallTimeout}
 				if newCustomResource.Name() != "" {
 					glog.V(4).Infof(kwlog(fmt.Sprintf("Found kubernetes custom resource definition object %s.", newCustomResource.Name())))
-					objMap[K8S_CRD_TYPE] = append(objMap[K8S_CRD_TYPE], newCustomResource)
+					objMap[cutil.K8S_CRD_TYPE] = append(objMap[cutil.K8S_CRD_TYPE], newCustomResource)
 				} else {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: custom resource definition object must have a name in its metadata section.")))
 				}
@@ -191,7 +190,7 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 				if !ok {
 					return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: no custom resource object with kind %v found in %v.", kind, customResources)))
 				}
-				objMap[K8S_CRD_TYPE] = append(objMap[K8S_CRD_TYPE], CustomResourceV1{CustomResourceDefinitionObject: typedCRD, CustomResourceObjectList: customResourceList, InstallTimeout: crInstallTimeout})
+				objMap[cutil.K8S_CRD_TYPE] = append(objMap[cutil.K8S_CRD_TYPE], CustomResourceV1{CustomResourceDefinitionObject: typedCRD, CustomResourceObjectList: customResourceList, InstallTimeout: crInstallTimeout})
 			} else {
 				return objMap, namespace, fmt.Errorf(kwlog(fmt.Sprintf("Error: custom resource definition object has unrecognized type %T: %v", obj.Object, obj.Object)))
 			}
@@ -200,7 +199,7 @@ func sortAPIObjects(allObjects []APIObjects, customResources map[string][]*unstr
 			if typedOO, ok := obj.Object.(*unstructured.Unstructured); ok {
 				newOO := OtherObject{Object: typedOO, GVK: obj.Type}
 				glog.V(4).Infof(kwlog(fmt.Sprintf("Found object %v of unstructured type %v", newOO.Name(), obj.Type)))
-				objMap[K8S_UNSTRUCTURED_TYPE] = append(objMap[K8S_UNSTRUCTURED_TYPE], newOO)
+				objMap[cutil.K8S_UNSTRUCTURED_TYPE] = append(objMap[cutil.K8S_UNSTRUCTURED_TYPE], newOO)
 			} else {
 				glog.Errorf(kwlog(fmt.Sprintf("Object with gvk %v has type %T, not unstructured kube type.", obj.Type, obj.Object)))
 			}
@@ -784,7 +783,7 @@ func (d DeploymentAppsV1) Install(c KubeClient, namespace string) error {
 		glog.V(3).Infof(kwlog(fmt.Sprintf("creating k8s secrets for service secret %v", d.ServiceSecrets)))
 
 		// ServiceSecrets is a map, key is the secret name, value is the base64 encoded string.
-		decodedSecrets, err := decodeServiceSecret(d.ServiceSecrets)
+		decodedSecrets, err := DecodeServiceSecret(d.ServiceSecrets)
 		if err != nil {
 			return err
 		}
@@ -817,7 +816,7 @@ func (d DeploymentAppsV1) Update(c KubeClient, namespace string) error {
 	// If len(d.ServiceSecrets) > 0, need to check each entry, and update the value of service secrets entry in the k8s secret (Note: not replace the entire k8s with the d.ServiceSecrets)
 	if len(d.ServiceSecrets) > 0 {
 		// Update ServiceSecrets
-		secretsName := fmt.Sprintf("%s-%s", HZN_SERVICE_SECRETS, d.AgreementId)
+		secretsName := fmt.Sprintf("%s-%s", cutil.HZN_SERVICE_SECRETS, d.AgreementId)
 		if k8sSecretObject, err := c.Client.CoreV1().Secrets(namespace).Get(context.Background(), secretsName, metav1.GetOptions{}); err != nil {
 			return err
 		} else if k8sSecretObject == nil {
@@ -939,7 +938,7 @@ func (cr CustomResourceV1Beta1) Install(c KubeClient, namespace string) error {
 	}
 
 	// Client for creating the CR in the cluster
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		return fmt.Errorf("Error creating the dynamic kube client: %v", err)
 	}
@@ -986,7 +985,7 @@ func (cr CustomResourceV1Beta1) Install(c KubeClient, namespace string) error {
 func (cr CustomResourceV1Beta1) Uninstall(c KubeClient, namespace string) {
 	glog.V(3).Infof(kwlog(fmt.Sprintf("deleting operator custom resource created by this CRD %v %v %v %v", cr.Name(), cr.kind(), cr.group(), cr.versions())))
 
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		glog.Errorf(kwlog(fmt.Sprintf("Error: unable to get a kubernetes dynamic client for uninstalling the custom resource: %v", err)))
 		return
@@ -1074,7 +1073,7 @@ func (cr CustomResourceV1Beta1) Status(c KubeClient, namespace string) (interfac
 	if err != nil {
 		return nil, err
 	}
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		return nil, err
 	}
@@ -1192,7 +1191,7 @@ func (cr CustomResourceV1) Install(c KubeClient, namespace string) error {
 	}
 
 	// client for interacting with unknown types including custom resource types
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		return err
 	}
@@ -1239,7 +1238,7 @@ func (cr CustomResourceV1) Install(c KubeClient, namespace string) error {
 func (cr CustomResourceV1) Uninstall(c KubeClient, namespace string) {
 	glog.V(3).Infof(kwlog(fmt.Sprintf("deleting operator custom resource created by this CRD %v %v %v %v", cr.Name(), cr.kind(), cr.group(), cr.versions())))
 
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		glog.Errorf(kwlog(fmt.Sprintf("Error: unable to get a kubernetes dynamic client for uninstalling the custom resource: %v", err)))
 		return
@@ -1323,7 +1322,7 @@ func (cr CustomResourceV1) waitForCRUninstall(c KubeClient, namespace string, ti
 
 // Status returns the status of the operator's service pod. This is a user-defined object
 func (cr CustomResourceV1) Status(c KubeClient, namespace string) (interface{}, error) {
-	dynClient, err := NewDynamicKubeClient()
+	dynClient, err := cutil.NewDynamicKubeClient()
 	if err != nil {
 		return nil, fmt.Errorf(kwlog(fmt.Sprintf("Error: failed to get a kubernetes dynamic client: %v", err)))
 	}
@@ -1442,7 +1441,7 @@ func checkCRDInUse(crClient dynamic.NamespaceableResourceInterface, crdKind stri
 	return false, nil
 }
 
-func decodeServiceSecret(serviceSecrets map[string]string) (map[string]string, error) {
+func DecodeServiceSecret(serviceSecrets map[string]string) (map[string]string, error) {
 	decodedSec := map[string]string{}
 
 	for secName, secValue := range serviceSecrets {
