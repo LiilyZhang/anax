@@ -40,8 +40,12 @@ const (
 
 	SECRETS_VOLUME_NAME = "service-secrets-vol"
 
-	AGENT_PVC_NAME  = "openhorizon-agent-pvc"
-	MMS_VOLUME_NAME = "mms-shared-storage"
+	AGENT_PVC_NAME       = "openhorizon-agent-pvc"
+	MMS_VOLUME_NAME      = "mms-shared-storage"
+	MMS_AUTH_VOLUME_NAME = "mms-auth-volume"
+	MMS_AUTH_MOUNT_PATH  = "/ess-auth"
+	MMS_CERT_VOLUME_NAME = "mms-cert-volume"
+	MMS_CERT_MOUNT_PATH  = "/ess-cert"
 
 	K8S_CLUSTER_ROLE_TYPE          = "ClusterRole"
 	K8S_CLUSTER_ROLEBINDING_TYPE   = "ClusterRoleBinding"

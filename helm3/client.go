@@ -57,7 +57,7 @@ func NewHelm3Client() (*Helm3Client, error) {
 	return &Helm3Client, nil
 }
 
-func (h Helm3Client) InstallChart(b64Package string, releaseName string, namespace string, mmsPVCConfig map[string]interface{}, envVars map[string]string, fssAuthFilePath string, fssCertFilePath string, secretsMap map[string]string, agId string) error {
+func (h Helm3Client) InstallChart(b64Package string, releaseName string, namespace string, envVars map[string]string, fssAuthFilePath string, fssCertFilePath string, secretsMap map[string]string, agId string) error {
 	glog.V(3).Infof(h3wlog(fmt.Sprintf("lily - Installing helm3 chart at: %v, release: %v, namespace: %v, agreementId: %v", b64Package, releaseName, namespace, agId)))
 	var fileName string
 	fileName, err := ConvertB64StringToFile(b64Package, agId)
@@ -93,7 +93,7 @@ func (h Helm3Client) InstallChart(b64Package string, releaseName string, namespa
 		return err
 	}
 
-	// dry run
+	// dry run to get the k8s manifests
 	var vals map[string]interface{}
 	var dryRunRelease *release.Release
 	if dryRunRelease, err = client.RunWithContext(context.TODO(), chart, vals); err != nil {
@@ -125,7 +125,7 @@ func (h Helm3Client) InstallChart(b64Package string, releaseName string, namespa
 				continue
 			}
 			glog.V(3).Infof(h3wlog(fmt.Sprintf("lily - find deployment object %v", deploymentObject)))
-			deploymentWithHzn, err := deploymentObject.AddHznToDeployment(h.KubeClientSet, releaseName, namespace, mmsPVCConfig, envVars, fssAuthFilePath, fssCertFilePath, secretsMap, agId)
+			deploymentWithHzn, err := deploymentObject.AddHznToDeployment(h.KubeClientSet, releaseName, namespace, envVars, fssAuthFilePath, fssCertFilePath, secretsMap, agId)
 			if err != nil {
 				return fmt.Errorf("failed to update deployment under release %v, error: %v", releaseName, err)
 			}
@@ -144,7 +144,7 @@ func (h Helm3Client) InstallChart(b64Package string, releaseName string, namespa
 	glog.V(3).Infof(h3wlog(fmt.Sprintf("lily - checkedTmplFile list: %v", checkedTmplFile)))
 	glog.V(3).Infof(h3wlog(fmt.Sprintf("lily - otherTemplateFiles list: %v", otherTemplateFiles)))
 	otherTemplateFiles = append(otherTemplateFiles, checkedTmplFile...)
-	// add the updataed deployment template back to chart
+	// add the updated deployment template back to chart
 	chart.Templates = otherTemplateFiles
 
 	client.DryRun = false
@@ -208,11 +208,6 @@ func (h Helm3Client) UninstallK8sObjects(releaseName string, namespace string, a
 		glog.Errorf(h3wlog(err.Error()))
 	}
 
-	glog.V(3).Infof(h3wlog(fmt.Sprintf("for helm3 release %v, deleting mms pvc for agreement %v in namespace %v", releaseName, agId, namespace)))
-	if err := h.KubeClientSet.DeleteMMSPVC(agId, namespace); err != nil {
-		glog.Errorf(h3wlog(err.Error()))
-	}
-
 	glog.V(3).Infof(h3wlog(fmt.Sprintf("for helm3 release %v, deleting service secret for agreement %v in namespace %v", releaseName, agId, namespace)))
 	if err := h.KubeClientSet.DeleteK8SSecrets(agId, namespace); err != nil {
 		glog.Errorf(h3wlog(err.Error()))
@@ -220,9 +215,8 @@ func (h Helm3Client) UninstallK8sObjects(releaseName string, namespace string, a
 
 	if namespace != cutil.GetClusterNamespace() {
 		glog.V(3).Infof(h3wlog(fmt.Sprintf("for helm3 release %v, deleting namespace: %v", releaseName, namespace)))
-
+		h.KubeClientSet.UninstallNamespace(namespace)
 	}
-
 }
 
 func (h Helm3Client) ReleaseStatus(releaseName string, namespace string) (*release.Release, error) {

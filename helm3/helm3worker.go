@@ -214,7 +214,7 @@ func (w *Helm3Worker) processHelm3Package(lc *events.AgreementLaunchContext, hd 
 
 		fssAuthFilePath := path.Join(w.GetAuthenticationManager().GetCredentialPath(lc.AgreementId), config.HZN_FSS_AUTH_FILE) // /var/horizon/ess-auth/<agreementId>/auth.json
 		fssCertFilePath := path.Join(w.config.GetESSSSLClientCertPath(), config.HZN_FSS_CERT_FILE)                             // /var/horizon/ess-auth/SSL/cert/cert.pem
-		err = client.InstallChart(hd.ChartArchive, hd.ReleaseName, lc.Configure.ClusterNamespace, hd.MMSPVC, *(lc.EnvironmentAdditions), fssAuthFilePath, fssCertFilePath, secretsMap, lc.AgreementId)
+		err = client.InstallChart(hd.ChartArchive, hd.ReleaseName, lc.Configure.ClusterNamespace, *(lc.EnvironmentAdditions), fssAuthFilePath, fssCertFilePath, secretsMap, lc.AgreementId)
 		if err != nil {
 			return err
 		}

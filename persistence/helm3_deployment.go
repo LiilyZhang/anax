@@ -13,12 +13,11 @@ type Helm3DeploymentConfig struct {
 	ChartArchive string                 `json:"chart_archive"` // base64 encoded binary of helm3 package tar file
 	ReleaseName  string                 `json:"release_name"`
 	Secrets      map[string]interface{} `json:"secrets,omitempty"`
-	MMSPVC       map[string]interface{} `json:"mmspvc,omitempty"`
 }
 
 func (h *Helm3DeploymentConfig) ToString() string {
 	if h != nil {
-		return fmt.Sprintf("ChartArchive: %v, Release Name: %v, Secrets: %v, MMSPVC: %v", cutil.TruncateDisplayString(h.ChartArchive, 20), h.ReleaseName, h.Secrets, h.MMSPVC)
+		return fmt.Sprintf("ChartArchive: %v, Release Name: %v, Secrets: %v", cutil.TruncateDisplayString(h.ChartArchive, 20), h.ReleaseName, h.Secrets)
 	}
 	return ""
 }

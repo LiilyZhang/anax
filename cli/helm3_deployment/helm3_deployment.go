@@ -56,21 +56,22 @@ func (p *Helm3DeploymentConfigPlugin) Sign(dep map[string]interface{}, privKey *
 	}
 	dep["chart_archive"] = b64
 
-	if _, ok := dep["mmsPVC"]; ok {
-		// mmsPVC field is defined
-		mmsPVCConfig := dep["mmsPVC"].(map[string]interface{})
-		enableVal, ok := mmsPVCConfig["enable"]
-		if !ok || !enableVal.(bool) {
-			msgPrinter.Printf("Warning: mmsPVC is not enabled for this cluster service")
-			// remove the "mmsPVC" section
-			delete(dep, "mmsPVC")
-		}
+	// no need to configure mms PVC for helm3 mms service
+	// if _, ok := dep["mmsPVC"]; ok {
+	// 	// mmsPVC field is defined
+	// 	mmsPVCConfig := dep["mmsPVC"].(map[string]interface{})
+	// 	enableVal, ok := mmsPVCConfig["enable"]
+	// 	if !ok || !enableVal.(bool) {
+	// 		msgPrinter.Printf("Warning: mmsPVC is not enabled for this cluster service")
+	// 		// remove the "mmsPVC" section
+	// 		delete(dep, "mmsPVC")
+	// 	}
 
-		if pvcSizeVal, ok := mmsPVCConfig["pvcSizeGB"]; ok {
-			pvcSize := int64(pvcSizeVal.(float64))
-			msgPrinter.Printf("pvcSizeGB: %v\n", pvcSize)
-		}
-	}
+	// 	if pvcSizeVal, ok := mmsPVCConfig["pvcSizeGB"]; ok {
+	// 		pvcSize := int64(pvcSizeVal.(float64))
+	// 		msgPrinter.Printf("pvcSizeGB: %v\n", pvcSize)
+	// 	}
+	// }
 
 	// Stringify and sign the deployment string.
 	deployment, err := json.Marshal(dep)
@@ -107,10 +108,6 @@ func (p *Helm3DeploymentConfigPlugin) DefaultClusterConfig() interface{} {
 	return map[string]interface{}{
 		"chart_archive": "",
 		"release_name":  "",
-		"mmsPVC": map[string]interface{}{
-			"enable":    false,
-			"pvcSizeGB": 0,
-		},
 	}
 }
 

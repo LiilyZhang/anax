@@ -127,7 +127,7 @@ if [ $? -ne 0 ]; then echo "Failure configuring k8s agent deployment template fi
 
 # TO DO: remove this section 
 echo "preload storage image for microk8s"
-docker save cdkbot/hostpath-provisioner-amd64:1.0.0 > /tmp/host-provisiner-image.tar
+docker save cdkbot/hostpath-provisioner:1.5.0 > /tmp/host-provisiner-image.tar
 if [ $? -ne 0 ]; then echo "Failure tar-ing host provisioner image to file"; exit 1; fi
 
 $cprefix microk8s.ctr image import --base-name cdkbot/hostpath-provisioner-amd64 /tmp/host-provisiner-image.tar

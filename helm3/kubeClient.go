@@ -11,11 +11,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"os"
-	"strconv"
 )
 
 // Client to interact with all standard k8s objects
@@ -76,7 +74,11 @@ func (c KubeClient) UninstallNamespace(namespace string) {
 		glog.V(3).Infof(h3wlog(fmt.Sprintf("deleting namespace %v", namespace)))
 		err := c.Client.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{})
 		if err != nil {
-			glog.Errorf(h3wlog(fmt.Sprintf("unable to delete namespace %s. Error: %v", namespace, err)))
+			glog.Errorf(h3wlog(fmt.Sprintf("unable to delete namespace %s. Error was: %v, now force deleting namespace", namespace, err)))
+			gracePeriodSeconds := int64(0)
+			if err = c.Client.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds}); err != nil {
+				glog.Errorf(h3wlog(fmt.Sprintf("unable to force delete namespace %s. Error: %v", namespace, err)))
+			}
 		}
 
 	}
@@ -196,68 +198,6 @@ func (c KubeClient) DeleteESSCertSecrets(agId string, namespace string) error {
 	return nil
 }
 
-func (c KubeClient) CreateMMSPVC(envVars map[string]string, mmsPVCConfig map[string]interface{}, agId string, namespace string) (string, error) {
-	storageClass, accessModes, _ := cutil.GetAgentPVCInfo()
-
-	if scInUserinput, ok := envVars[cutil.STORAGE_CLASS_USERINPUT_NAME]; ok {
-		storageClass = scInUserinput
-	}
-
-	if accessModeInUserinput, ok := envVars[cutil.PVC_ACCESS_MODE_USERINPUT_NAME]; ok {
-		if m, ok := accessModeMap[accessModeInUserinput]; ok {
-			accessModes = []corev1.PersistentVolumeAccessMode{m}
-		}
-	}
-
-	pvcSizeInString := cutil.DEFAULT_PVC_SIZE_IN_STRING
-	if size, ok := mmsPVCConfig["pvcSize"]; ok {
-		sizeInServiceDef := int64(size.(float64))
-		if sizeInServiceDef > 0 {
-			pvcSizeInString = strconv.FormatInt(sizeInServiceDef, 10)
-		}
-	}
-
-	if pvcSizeInUserInput, ok := envVars[cutil.PVC_SIZE_USERINPUT_NAME]; ok {
-		pvcSizeInString = pvcSizeInUserInput
-	}
-
-	mmsPvcName := fmt.Sprintf("%s-%s", cutil.K8S_MMS_SHARED_PVC_NAME, agId)
-	mmsPVC := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mmsPvcName,
-			Namespace: namespace,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &storageClass,
-			AccessModes:      accessModes,
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%vGi", pvcSizeInString)),
-				},
-			},
-		},
-	}
-
-	res, err := c.Client.CoreV1().PersistentVolumeClaims(namespace).Create(context.Background(), &mmsPVC, metav1.CreateOptions{})
-	if err != nil && errors.IsAlreadyExists(err) {
-		_, err = c.Client.CoreV1().PersistentVolumeClaims(namespace).Update(context.Background(), &mmsPVC, metav1.UpdateOptions{})
-	}
-	if err != nil {
-		return "", fmt.Errorf("failed to create mms pvc for %s: %v", agId, err)
-	}
-	return res.ObjectMeta.Name, nil
-}
-
-func (c KubeClient) DeleteMMSPVC(agId string, namespace string) error {
-	mmsPvcName := fmt.Sprintf("%s-%s", cutil.K8S_MMS_SHARED_PVC_NAME, agId)
-
-	err := c.Client.CoreV1().PersistentVolumeClaims(namespace).Delete(context.Background(), mmsPvcName, metav1.DeleteOptions{})
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete mms pvc for %s: %v", agId, err)
-	}
-	return nil
-}
-
 // CreateK8SSecrets will create a k8s secrets object which contains the service secret name and value
 func (c KubeClient) CreateK8SSecrets(serviceSecretsMap map[string]string, agId string, namespace string) (string, error) {
 	secretsLabel := map[string]string{"name": cutil.HZN_SERVICE_SECRETS}
@@ -319,7 +259,7 @@ type DeploymentObject struct {
 	Deployment *appsv1.Deployment
 }
 
-func (d DeploymentObject) AddHznToDeployment(kubeClientSet *KubeClient, releaseName string, namespace string, mmsPVCConfig map[string]interface{}, envVars map[string]string, fssAuthFilePath string, fssCertFilePath string, secretsMap map[string]string, agId string) (*appsv1.Deployment, error) {
+func (d DeploymentObject) AddHznToDeployment(kubeClientSet *KubeClient, releaseName string, namespace string, envVars map[string]string, fssAuthFilePath string, fssCertFilePath string, secretsMap map[string]string, agId string) (*appsv1.Deployment, error) {
 	glog.V(3).Infof(h3wlog(fmt.Sprintf("prepare kubernetes objects for release deployment %v under namespace %s, agreement id %v", releaseName, namespace, agId)))
 	cutil.SetESSEnvVarsForClusterAgent(envVars, config.ENVVAR_PREFIX, agId)
 
@@ -343,6 +283,7 @@ func (d DeploymentObject) AddHznToDeployment(kubeClientSet *KubeClient, releaseN
 			kubeClientSet.DeleteESSAuthSecrets(agId, namespace)
 			essAuthSecretName, _ = kubeClientSet.CreateESSAuthSecrets(fssAuthFilePath, agId, namespace)
 		}
+		dWithEnv = addESSAuthSecretsToDeploymentObject(dWithEnv, essAuthSecretName)
 		glog.V(3).Infof(h3wlog(fmt.Sprintf("ess auth secret %v is created under namespace: %v", essAuthSecretName, namespace)))
 	}
 
@@ -352,20 +293,8 @@ func (d DeploymentObject) AddHznToDeployment(kubeClientSet *KubeClient, releaseN
 			kubeClientSet.DeleteESSCertSecrets(agId, namespace)
 			essCertSecretName, _ = kubeClientSet.CreateESSCertSecrets(fssCertFilePath, agId, namespace)
 		}
+		dWithEnv = addESSCertSecretsToDeploymentObject(dWithEnv, essCertSecretName)
 		glog.V(3).Infof(h3wlog(fmt.Sprintf("ess cert secret %v is created under namespace: %v", essCertSecretName, namespace)))
-	}
-
-	// create MMS pvc
-	if !kube_operator.IsMMSPVCEnabled(mmsPVCConfig) {
-		glog.V(3).Infof(h3wlog(fmt.Sprintf("MMSPVCConfig is not enabled %v, skip creating the MMS PVC", mmsPVCConfig)))
-	} else {
-		glog.V(3).Infof(h3wlog(fmt.Sprintf("MMSPVCConfig is enabled %v, creating the MMS PVC", mmsPVCConfig)))
-		pvcName, err := kubeClientSet.CreateMMSPVC(envVars, mmsPVCConfig, agId, namespace)
-		if err != nil && errors.IsAlreadyExists(err) {
-			kubeClientSet.DeleteMMSPVC(agId, namespace)
-			pvcName, _ = kubeClientSet.CreateMMSPVC(envVars, mmsPVCConfig, agId, namespace)
-		}
-		glog.V(3).Infof(h3wlog(fmt.Sprintf("MMS pvc %v is created under namespace: %v", pvcName, namespace)))
 	}
 
 	// handle service vault secrets
@@ -410,16 +339,36 @@ func addConfigMapVarToDeploymentObject(deployment appsv1.Deployment, configMapNa
 }
 
 // add a reference to the secrets service secrets to the deployment
-func addServiceSecretsToDeploymentObject(deployment appsv1.Deployment, secretsNamePlaceHolder string) appsv1.Deployment {
+func addServiceSecretsToDeploymentObject(deployment appsv1.Deployment, secretsName string) appsv1.Deployment {
 	// Add secrets (secretsName is $HZN_SERVICE_SECRETS-$agId: hzn-service-secrets-12345) as Volume in deployment
 	volumeName := cutil.SECRETS_VOLUME_NAME
-	volume := corev1.Volume{Name: volumeName, VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretsNamePlaceHolder}}}
+	// mount the volume to deployment containers
+	secretsFilePathInPod := config.HZN_SECRETS_MOUNT
+	dp := addSecretsToDeploymentObject(deployment, secretsName, volumeName, secretsFilePathInPod)
+	return dp
+}
+
+func addESSAuthSecretsToDeploymentObject(deployment appsv1.Deployment, secretsName string) appsv1.Deployment {
+	dp := addSecretsToDeploymentObject(deployment, secretsName, cutil.MMS_AUTH_VOLUME_NAME, cutil.MMS_AUTH_MOUNT_PATH)
+	return dp
+}
+
+func addESSCertSecretsToDeploymentObject(deployment appsv1.Deployment, secretsName string) appsv1.Deployment {
+	dp := addSecretsToDeploymentObject(deployment, secretsName, cutil.MMS_CERT_VOLUME_NAME, cutil.MMS_CERT_MOUNT_PATH)
+	return dp
+}
+
+// add a reference to the secrets service secrets to the deployment
+func addSecretsToDeploymentObject(deployment appsv1.Deployment, secretsName string, volumeName string, volumeMountPath string) appsv1.Deployment {
+	// Add secrets (secretsName is $HZN_SERVICE_SECRETS-$agId: hzn-service-secrets-12345) as Volume in deployment
+	//volumeName := cutil.SECRETS_VOLUME_NAME
+	volume := corev1.Volume{Name: volumeName, VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretsName}}}
 	volumes := append(deployment.Spec.Template.Spec.Volumes, volume)
 	deployment.Spec.Template.Spec.Volumes = volumes
 
 	// mount the volume to deployment containers
-	secretsFilePathInPod := config.HZN_SECRETS_MOUNT
-	volumeMount := corev1.VolumeMount{Name: volumeName, MountPath: secretsFilePathInPod}
+	//volumeMountPath := config.HZN_SECRETS_MOUNT
+	volumeMount := corev1.VolumeMount{Name: volumeName, MountPath: volumeMountPath}
 
 	// Add secrets as volume mount for containers
 	i := len(deployment.Spec.Template.Spec.Containers) - 1
