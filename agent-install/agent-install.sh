@@ -128,6 +128,7 @@ Options/Flags:
         --container     Install the agent in a container. This is the default behavior for MacOS installations. (This flag is equivalent to AGENT_IN_CONTAINER)
         --namespace     The namespace that the cluster agent will be installed to. The default is 'openhorizon-agent'
         --namespace-scoped The cluster agent will only have namespace scope. The default is 'false'
+        --removeInitComtainer Remove the InitCountainer from the agent deployment yaml file. InitContainer is used to setup the folder permission that mounted with agent pvc. 
     -N                  The container number to be upgraded. The default is 1 which means the container name is horizon1. It is used for upgrade only, the HORIZON_URL setting in /etc/horizon/hzn.json will not be changed. (This flag is equivalent to AGENT_CONTAINER_NUMBER)
     -h  --help          This usage
 
@@ -203,6 +204,9 @@ while getopts "c:i:j:p:k:u:d:z:hl:n:sfbw:o:O:T:t:D:a:U:CG:N:-:" opt; do
                 ;;
             namespace-scoped)
                 ARG_NAMESPACE_SCOPED=true
+                ;;
+            removeInitComtainer)
+                ARG_REMOVE_INIT_CONTAINER=true
                 ;;
             help)
                 usage 0
@@ -1277,6 +1281,7 @@ function get_all_variables() {
         get_variable EDGE_CLUSTER_PVC_SIZE "$DEFAULT_PVC_SIZE"
         get_variable AGENT_NAMESPACE "$DEFAULT_AGENT_NAMESPACE"
         get_variable NAMESPACE_SCOPED 'false'
+        get_variable REMOVE_INIT_CONTAINER 'false'
         get_variable USE_EDGE_CLUSTER_REGISTRY 'true'
         get_variable AGENT_DEPLOYMENT_STATUS_TIMEOUT_SECONDS '300'
         get_variable ENABLE_AUTO_UPGRADE_CRONJOB 'true'
@@ -3944,7 +3949,8 @@ function prepare_k8s_deployment_file() {
     # Note: get_edge_cluster_files() already downloaded deployment-template.yml, if necessary
 
     # InitContainer needs to be removed for ocp because it breaks mounted directory permisson. In ocp, the permission of volume is configured by scc.
-    if is_ocp_cluster && [[ $EDGE_CLUSTER_STORAGE_CLASS != ibmc-file* ]] && [[ $EDGE_CLUSTER_STORAGE_CLASS != ibmc-vpc-file* ]]; then
+    #if ${REMOVE_INIT_CONTAINER} || (is_ocp_cluster && [[ $EDGE_CLUSTER_STORAGE_CLASS != ibmc-file* ]] && [[ $EDGE_CLUSTER_STORAGE_CLASS != ibmc-vpc-file* ]]); then
+    if is_ocp_cluster && [[ $EDGE_CLUSTER_STORAGE_CLASS != ibmc-file* ]] && [[ $EDGE_CLUSTER_STORAGE_CLASS != ibmc-vpc-file* ]] && [[ $EDGE_CLUSTER_STORAGE_CLASS != ocs-storagecluster-cephfs* ]]; then
         log_info "remove initContainer"
         sed -i -e '/START_NOT_FOR_OCP/,/END_NOT_FOR_OCP/d' deployment-template.yml
     fi
