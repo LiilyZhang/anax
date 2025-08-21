@@ -66,6 +66,7 @@ CRONJOB_AUTO_UPGRADE_NAME="auto-upgrade-cronjob"
 IMAGE_REGISTRY_SECRET_NAME="openhorizon-agent-secrets-docker-cert"
 CONFIGMAP_NAME="openhorizon-agent-config"
 PVC_NAME="openhorizon-agent-pvc"
+DEFAULT_PVC_SIZE="10Gi"
 GET_RESOURCE_MAX_TRY=5
 POD_ID=""
 HZN_ENV_FILE="/tmp/agent-install-horizon-env"
@@ -132,7 +133,6 @@ Options/Flags:
 
 Additional Variables (in environment or config file):
     HZN_AGBOT_URL: The URL that is used for the 'hzn agbot ...' commands.
-    HZN_SDO_SVC_URL: The URL that is used for the 'hzn voucher ...' and 'hzn sdo ...' commands. Or,
     HZN_FDO_SVC_URL: The URL that is used for the 'hzn fdo ...' commands.
 
 Additional Edge Device Variables (in environment or config file):
@@ -158,6 +158,7 @@ Additional Edge Cluster Variables (in environment or config file):
     EDGE_CLUSTER_REGISTRY_USERNAME: specify this value if the edge cluster registry requires authentication
     EDGE_CLUSTER_REGISTRY_TOKEN: specify this value if the edge cluster registry requires authentication
     EDGE_CLUSTER_STORAGE_CLASS: the storage class to use for the agent and edge services. Default: gp2
+    EDGE_CLUSTER_PVC_SIZE: the requested size in the agent persistent volume to use for the agent. Default: 10Gi
     AGENT_NAMESPACE: The namespace the agent should run in. Default: openhorizon-agent
     AGENT_WAIT_MAX_SECONDS: Maximum seconds to wait for the Horizon agent to start or stop. Default: 30
     AGENT_DEPLOYMENT_STATUS_TIMEOUT_SECONDS: Maximum seconds to wait for the agent deployment rollout status to be successful. Default: 300
@@ -1201,7 +1202,6 @@ function get_all_variables() {
     get_variable AGENT_SKIP_REGISTRATION 'false'
     get_variable HZN_EXCHANGE_URL '' 'true'
     get_variable HZN_AGBOT_URL   # for now it is optional, since not every other component in the field supports it yet
-    get_variable HZN_SDO_SVC_URL   # for now it is optional, since not every other component in the field supports it yet
     get_variable HZN_FDO_SVC_URL   # for now it is optional, since not every other component in the field supports it yet
     get_variable NODE_ID   # deprecated
     get_variable HZN_DEVICE_ID
@@ -1272,6 +1272,7 @@ function get_all_variables() {
         get_variable EDGE_CLUSTER_STORAGE_CLASS 'gp2'
         check_cluster_storage_class "$EDGE_CLUSTER_STORAGE_CLASS"
 
+        get_variable EDGE_CLUSTER_PVC_SIZE "$DEFAULT_PVC_SIZE"
         get_variable AGENT_NAMESPACE "$DEFAULT_AGENT_NAMESPACE"
         get_variable NAMESPACE_SCOPED 'false'
         get_variable USE_EDGE_CLUSTER_REGISTRY 'true'
@@ -1820,7 +1821,7 @@ function is_horizon_defaults_correct() {
     fi
 
     local horizon_defaults_value
-    # FYI, these variables are currently supported in the defaults file: HZN_EXCHANGE_URL, HZN_FSS_CSSURL, HZN_AGBOT_URL, HZN_SDO_SVC_URL (or HZN_FDO_SVC_URL), HZN_DEVICE_ID, HZN_MGMT_HUB_CERT_PATH, HZN_AGENT_PORT, HZN_VAR_BASE, HZN_NO_DYNAMIC_POLL, HZN_MGMT_HUB_CERT_PATH, HZN_ICP_CA_CERT_PATH (deprecated), CMTN_SERVICEOVERRIDE
+    # FYI, these variables are currently supported in the defaults file: HZN_EXCHANGE_URL, HZN_FSS_CSSURL, HZN_AGBOT_URL, HZN_FDO_SVC_URL, HZN_DEVICE_ID, HZN_MGMT_HUB_CERT_PATH, HZN_AGENT_PORT, HZN_VAR_BASE, HZN_NO_DYNAMIC_POLL, HZN_MGMT_HUB_CERT_PATH, HZN_ICP_CA_CERT_PATH (deprecated), CMTN_SERVICEOVERRIDE
 
     # Note: the '|| true' is so not finding the strings won't cause set -e to exit the script
     horizon_defaults_value=$(grep -E '^HZN_EXCHANGE_URL=' $defaults_file || true)
@@ -1842,14 +1843,6 @@ function is_horizon_defaults_correct() {
     horizon_defaults_value=$(trim_variable "${horizon_defaults_value#*=}")
     if ! urlEquals $horizon_defaults_value $HZN_AGBOT_URL; then
         log_info "HZN_AGBOT_URL value changed, return"
-        return 1
-    fi
-
-    # even if HZN_SDO_SVC_URL is empty in this script, still verify the defaults file is the same
-    horizon_defaults_value=$(grep -E '^HZN_SDO_SVC_URL=' $defaults_file || true)
-    horizon_defaults_value=$(trim_variable "${horizon_defaults_value#*=}")
-    if ! urlEquals $horizon_defaults_value $HZN_SDO_SVC_URL; then
-        log_info "HZN_SDO_SVC_URL value changed, return"
         return 1
     fi
 
@@ -1959,9 +1952,6 @@ function create_or_update_horizon_defaults() {
         if [[ -n $HZN_AGBOT_URL ]]; then
             sudo sh -c "echo 'HZN_AGBOT_URL=$HZN_AGBOT_URL' >> $defaults_file"
         fi
-        if [[ -n $HZN_SDO_SVC_URL ]]; then
-            sudo sh -c "echo 'HZN_SDO_SVC_URL=$HZN_SDO_SVC_URL' >> $defaults_file"
-        fi
         if [[ -n $HZN_FDO_SVC_URL ]]; then
             sudo sh -c "echo 'HZN_FDO_SVC_URL=$HZN_FDO_SVC_URL' >> $defaults_file"
         fi
@@ -1988,9 +1978,6 @@ function create_or_update_horizon_defaults() {
         add_to_or_update_horizon_defaults 'HZN_FSS_CSSURL' "$HZN_FSS_CSSURL" $defaults_file
         if [[ -n $HZN_AGBOT_URL ]]; then
             add_to_or_update_horizon_defaults 'HZN_AGBOT_URL' "$HZN_AGBOT_URL" $defaults_file
-        fi
-        if [[ -n $HZN_SDO_SVC_URL ]]; then
-            add_to_or_update_horizon_defaults 'HZN_SDO_SVC_URL' "$HZN_SDO_SVC_URL" $defaults_file
         fi
         if [[ -n $HZN_FDO_SVC_URL ]]; then
             add_to_or_update_horizon_defaults 'HZN_FDO_SVC_URL' "$HZN_FDO_SVC_URL" $defaults_file
@@ -2131,7 +2118,12 @@ function debian_device_install_prereqs() {
     log_debug "debian_device_install_prereqs() begin"
 
     log_info "Updating apt package index..."
-    runCmdQuietly apt-get update -q
+    set +e
+    apt-get update -q > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        log_warning "Failed to execute apt-get update -q, skip updating apt package index.."
+    fi
+    set -e
 
     log_info "Installing prerequisites, this could take a minute..."
 
@@ -2147,7 +2139,12 @@ function debian_device_install_prereqs() {
             else
                 curl -fsSL https://download.docker.com/linux/$DISTRO/gpg | apt-key add -
                 add-apt-repository -y "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/$DISTRO $(lsb_release -cs) stable"
-                runCmdQuietly apt-get update -q
+                set +e
+                apt-get update -q > /dev/null 2>&1
+                if [[ $? -ne 0 ]]; then
+                    log_warning "Failed to execute apt-get update -q, skip updating apt package index.."
+                fi
+                set -e
                 runCmdQuietly apt-get install -yqf docker-ce docker-ce-cli containerd.io
             fi
         fi
@@ -3922,9 +3919,6 @@ function create_horizon_env() {
     if [[ -n $HZN_AGBOT_URL ]]; then
         echo "HZN_AGBOT_URL=${HZN_AGBOT_URL}" >>$HZN_ENV_FILE
     fi
-    if [[ -n $HZN_SDO_SVC_URL ]]; then
-        echo "HZN_SDO_SVC_URL=${HZN_SDO_SVC_URL}" >>$HZN_ENV_FILE
-    fi
     if [[ -n $HZN_FDO_SVC_URL ]]; then
         echo "HZN_FDO_SVC_URL=${HZN_FDO_SVC_URL}" >>$HZN_ENV_FILE
     fi
@@ -4075,7 +4069,11 @@ function prepare_k8s_pvc_file() {
         pvc_mode="ReadWriteMany"
     fi
 
-    sed -e "s#__AgentNameSpace__#${AGENT_NAMESPACE}#g" -e "s/__StorageClass__/\"${EDGE_CLUSTER_STORAGE_CLASS}\"/g" -e "s#__PVCAccessMode__#${pvc_mode}#g" persistentClaim-template.yml >persistentClaim.yml
+    if [[ -z $CLUSTER_PVC_SIZE ]]; then
+        CLUSTER_PVC_SIZE=$DEFAULT_PVC_SIZE
+    fi
+
+    sed -e "s#__AgentNameSpace__#${AGENT_NAMESPACE}#g" -e "s/__StorageClass__/\"${EDGE_CLUSTER_STORAGE_CLASS}\"/g" -e "s#__PVCAccessMode__#${pvc_mode}#g" -e "s#__PVCStorageSize__#${CLUSTER_PVC_SIZE}#g" persistentClaim-template.yml >persistentClaim.yml
     chk $? 'creating persistentClaim.yml'
 
     log_debug "prepare_k8s_pvc_file() end"
@@ -4753,4 +4751,5 @@ elif is_cluster; then
 else
     log_fatal 1 "AGENT_DEPLOY_TYPE must be 'device' or 'cluster'"
 fi
+
 
