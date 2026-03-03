@@ -90,6 +90,10 @@ defaultEnv() {
 	if [[ -d ${base_host_dir}/fss-domain-socket ]]; then
 		anaxJson=$(jq ".Edge.FileSyncService.APIListen = \"${base_host_dir}/fss-domain-socket/essapi.sock\" " <<< $anaxJson)
 		checkrc $? "change FileSyncService.APIListen"
+
+		anaxJson=$(jq ".Edge.FileSyncService.UnixSocketFilePermissions = \"0777\" " <<< $anaxJson)
+		checkrc $? "change FileSyncService.UnixSocketFilePermissions"
+
 	fi
 	if [[ -d ${base_host_dir}/secrets ]]; then
 		anaxJson=$(jq ".Edge.SecretsManagerFilePath = \"${base_host_dir}/secrets\" " <<< $anaxJson)
