@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get -y install vim iptables build-essential wget git iputils-ping net-tools curl jq unzip kafkacat apt-transport-https socat software-properties-common lsb-release gettext-base
 
 ARG DOCKER_VER=28.5.2
-ARG GO_VER=1.24.6
+ARG GO_VER=1.26.3
 ARG VAULT_VER=1.20.4
 
 # install docker cli
